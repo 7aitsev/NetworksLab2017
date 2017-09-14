@@ -92,7 +92,7 @@ int main(int argc, char *argv[]) {
     size_t limit = 255;
     if(0 == (n = readn(sockfd, buffer, &limit)))
     {
-        buffer[bsize] = '\0';
+        buffer[limit] = '\0';
     }
     shutdown(sockfd, SHUT_RD);
     close(sockfd);
