@@ -89,10 +89,10 @@ int main(int argc, char *argv[]) {
     }
 
     /* Now read server response */
-    size_t bsize = 256;
-    if(0 == (n = readn(sockfd, buffer, &bsize)))
+    size_t limit = 255;
+    if(0 == (n = readn(sockfd, buffer, &limit)))
     {
-        buffer[bsize - 1] = '\0';
+        buffer[bsize] = '\0';
     }
     shutdown(sockfd, SHUT_RD);
     close(sockfd);
