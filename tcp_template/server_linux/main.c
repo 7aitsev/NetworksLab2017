@@ -71,7 +71,7 @@ int main(int argc, char *argv[]) {
 
     /* Accept actual connection from the client */
     newsockfd = accept(sockfd, (struct sockaddr *) &cli_addr, &clilen);
-    shutdown(SHUT_RDWR);
+    shutdown(sockfd, SHUT_RDWR);
     close(sockfd);
 
     if (newsockfd < 0) {
@@ -81,26 +81,26 @@ int main(int argc, char *argv[]) {
 
     /* If connection is established then start communicating */
     size_t limit = 255;
-    if(0 != readn(sockfd, buffer, &limit))
+    if(0 != readn(newsockfd, buffer, &limit))
     {
         fprintf(stderr, "Was read %ld bytes, but recv() failed:\n\t ", limit);
         perror("");
         exit(1);
     }
-    shutdown(sockfd, SHUT_RD);
+    shutdown(newsockfd, SHUT_RD);
 
     printf("Here is the message: %s\n", buffer);
 
     /* Write a response to the client */
     n = write(newsockfd, "I got your message", 18); // send on Windows
+    shutdown(newsockfd, SHUT_WR);
 
     if (n < 0) {
         perror("ERROR writing to socket");
         exit(1);
     }
 
-    close(sockfd);
-    shutdown(SHUT_WR);
+    close(newsockfd);
 
     return 0;
 }
