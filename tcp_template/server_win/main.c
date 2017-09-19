@@ -49,7 +49,7 @@ readn(SOCKET sfd, char * const data, size_t* dsize)
     *dsize = total;
     data[total] = '\0';
 
-    return SOCKET_ERROR == n ? EXIT_FAILURE : EXIT_SUCCESS;
+    return n > 0 ? (int) total : n;
 }
 
 SOCKET
@@ -131,7 +131,7 @@ runwinserver(SOCKET master)
     shutdown(master, SD_BOTH);
     closesocket(master);
     
-    if(0 != readn(slave, buf, &toread))
+    if(SOCKET_ERROR == readn(slave, buf, &toread))
     {
         fprintf(stderr, "Was read %d bytes, but recv() failed", toread);
         error("", &slave, exit);

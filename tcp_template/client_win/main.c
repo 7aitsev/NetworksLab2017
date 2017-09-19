@@ -49,7 +49,7 @@ readn(SOCKET sfd, char * const data, size_t* dsize)
     *dsize = total;
     data[total] = '\0';
 
-    return SOCKET_ERROR == n ? EXIT_FAILURE : EXIT_SUCCESS;
+    return n > 0 ? (int) total : n;
 }
 
 SOCKET
@@ -127,7 +127,7 @@ runclient(SOCKET sfd)
     }
     shutdown(sfd, SD_SEND);
     
-    if(0 != readn(sfd, buf, &limit))
+    if(SOCKET_ERROR == readn(sfd, buf, &limit))
     {
         fprintf(stderr, "Was read %d bytes, but recv() failed", limit);
         error("", &sfd, exit);
