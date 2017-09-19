@@ -28,7 +28,7 @@ readn(int sfd, char * const data, size_t* dsize)
     *dsize = total;
     data[total] = '\0';
 
-    return -1 == n ? EXIT_FAILURE : EXIT_SUCCESS;
+    return n > 0 ? (int) total : n;
 }
 
 int main(int argc, char *argv[]) {
@@ -91,7 +91,7 @@ int main(int argc, char *argv[]) {
 
     /* Now read server response */
     size_t limit = 255;
-    if(0 != readn(sockfd, buffer, &limit))
+    if(-1 == readn(sockfd, buffer, &limit))
     {
         fprintf(stderr, "Was read %ld bytes, but recv() failed:\n\t ", limit);
         perror("");

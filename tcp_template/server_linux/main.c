@@ -28,11 +28,10 @@ readn(int sfd, char * const data, size_t* dsize)
     *dsize = total;
     data[total] = '\0';
 
-    return -1 == n ? EXIT_FAILURE : EXIT_SUCCESS;
+    return n > 0 ? (int) total : n;
 }
 
-
-int main(int argc, char *argv[]) {
+int main(void) {
     int sockfd, newsockfd;
     uint16_t portno;
     unsigned int clilen;
@@ -81,7 +80,7 @@ int main(int argc, char *argv[]) {
 
     /* If connection is established then start communicating */
     size_t limit = 255;
-    if(0 != readn(newsockfd, buffer, &limit))
+    if(-1 == readn(newsockfd, buffer, &limit))
     {
         fprintf(stderr, "Was read %ld bytes, but recv() failed:\n\t ", limit);
         perror("");
