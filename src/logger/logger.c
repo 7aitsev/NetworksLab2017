@@ -56,7 +56,7 @@ logger_log(const char* format, ...)
     
     struct logdata* ld = g_logger.l_ld;
 
-    // logger_loop does not handle messages
+    // if logger_loop has not handled messages yet
     waitfor(&ld->ld_isready);
 
     va_list args;

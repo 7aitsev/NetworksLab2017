@@ -5,6 +5,12 @@ int
 server_prepare();
 
 void
-server_run(int master);
+server_run();
+
+void
+server_stop();
+
+void
+server_join();
 
 #endif
