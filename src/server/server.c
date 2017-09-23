@@ -1,4 +1,6 @@
 #include "logger/logger.h"
+#include "server/server.h"
+#include "server/terminal/terminal.h"
 
 #include <errno.h>
 #include <netdb.h>
@@ -9,30 +11,28 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
-int
-server_prepare()
+#define SERVER_HOST NULL
+#define SERVER_PORT "5001"
+#define SERVER_BACKLOG 5
+
+struct serverdata
 {
-    int status;
-    char* port = "5001";
-    char* host = NULL;
-    struct addrinfo hints;
-    struct addrinfo* servinfo;
+    char* host;
+    char* port;
+    int isrunning;
+    int listensocket;
+    pthread_t accept_tid;
+};
+
+static struct serverdata this;
+
+static int
+server_bind(struct addrinfo* servinfo)
+{
     struct addrinfo* p;
+    int yes = 1;
     int sfd;
 
-    memset(&hints, 0, sizeof(hints));
-    hints.ai_family = AF_INET;
-    hints.ai_socktype = SOCK_STREAM;
-    hints.ai_flags = AI_PASSIVE;
-    hints.ai_protocol = IPPROTO_TCP;
-
-    if(0 != (status = getaddrinfo(host, port, &hints, &servinfo)))
-    {
-        logger_log("[server] getaddrinfo: %s\n", gai_strerror(status));
-        return -1;
-    }
-
-    int yes = 1;
     for(p = servinfo; NULL != p; p = p->ai_next)
     {
         if(-1 == (sfd = socket(p->ai_family, p->ai_socktype, p->ai_protocol)))
@@ -40,7 +40,8 @@ server_prepare()
             continue;
         }
 
-        if(-1 == setsockopt(sfd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes))) {
+        if(-1 == setsockopt(sfd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes)))
+        {
             logger_log("[server] setsockopt: %s\n", strerror(errno));
             return -1;
         }
@@ -60,41 +61,66 @@ server_prepare()
     }
 
     freeaddrinfo(servinfo);
-
-    if(-1 == listen(sfd, 3))
-    {
-        logger_log("[server] listen: %s\n", strerror(errno));
-        return -1;
-    }
-
     return sfd;
 }
 
 int
-terminal_isclosed()
+server_prepare()
 {
-    return 1;
+    int rv;
+    struct addrinfo hints;
+    struct addrinfo* servinfo;
+
+    this.host = SERVER_HOST;
+    this.port = SERVER_PORT;
+
+    memset(&hints, 0, sizeof(hints));
+    hints.ai_family = AF_INET;
+    hints.ai_socktype = SOCK_STREAM;
+    hints.ai_flags = AI_PASSIVE;
+    hints.ai_protocol = IPPROTO_TCP;
+
+    rv = getaddrinfo(this.host, this.port, &hints, &servinfo);
+    if(0 != rv)
+    {
+        logger_log("[server] getaddrinfo: %s\n", gai_strerror(rv));
+        return -1;
+    }
+
+    if(0 <= (rv = server_bind(servinfo)))
+    {
+        if(-1 == listen(rv, SERVER_BACKLOG))
+        {
+            logger_log("[server] listen: %s\n", strerror(errno));
+            return -1;
+        }
+        this.listensocket = rv;
+    }
+
+    return rv;
 }
 
 static void*
-server_acceptloop(void* pmaster)
+server_acceptloop()
 {
-    int master = *((int*) pmaster);
     int slave;
-    struct sockaddr_storage client;
-    socklen_t addr_size = sizeof(client);
+    int master = this.listensocket;
+    struct sockaddr_storage sa_peer;
+    socklen_t addrsize = sizeof(sa_peer);
 
+    this.isrunning = 1;
     while(1)
     {
-        slave = accept(master, (struct sockaddr*) &client, &addr_size);
+        slave = accept(master, (struct sockaddr*) &sa_peer, &addrsize);
         if(-1 != slave)
         {
-            logger_log("[server] new client: %d\n", slave);
+            logger_log("[server] new peer: %d\n", slave);
+            //handler_new(slave);
             close(slave);
         }
         else
         {
-            if(terminal_isclosed())
+            if(!this.isrunning)
             {
                 break;
             }
@@ -106,38 +132,32 @@ server_acceptloop(void* pmaster)
         }
     }
 
-    return NULL;
-}
-
-static void*
-terminal_loop(void* pmaster)
-{
-    int master = *((int*) pmaster);
-    char inpline[10];
-
-    while(1)
-    {
-        fgets(inpline, 10, stdin);
-        if(0 == strcmp(inpline, "q\n"))
-        {
-            logger_log("[terminal] shutdown requested\n");
-            shutdown(master, SHUT_RDWR);
-            close(master);
-            break;
-        }
-    }
+    //handler_stopall();
 
     return NULL;
 }
 
 void
-server_run(int master)
+server_run()
 {
-    pthread_t accept_tid;
-    pthread_t terminal_tid;
+    pthread_create(&this.accept_tid, NULL,
+            server_acceptloop, &this.listensocket);
 
-    pthread_create(&accept_tid, NULL, server_acceptloop, &master);
-    pthread_create(&terminal_tid, NULL, terminal_loop, &master);
-    pthread_join(accept_tid, NULL);
-    pthread_join(terminal_tid, NULL);
+    terminal_setstopservercb(&server_stop);
+    terminal_run();
+}
+
+void
+server_stop()
+{
+    --this.isrunning;
+    shutdown(this.listensocket, SHUT_RDWR);
+    close(this.listensocket);
+}
+
+void
+server_join()
+{
+    pthread_join(this.accept_tid, NULL);
+    terminal_join();
 }
