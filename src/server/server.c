@@ -1,4 +1,5 @@
 #include "logger/logger.h"
+#include "server/handler/handler.h"
 #include "server/server.h"
 #include "server/terminal/terminal.h"
 
@@ -108,6 +109,7 @@ server_acceptloop()
     struct sockaddr_storage sa_peer;
     socklen_t addrsize = sizeof(sa_peer);
 
+    handler_init();
     this.isrunning = 1;
     while(1)
     {
@@ -115,8 +117,7 @@ server_acceptloop()
         if(-1 != slave)
         {
             logger_log("[server] new peer: %d\n", slave);
-            //handler_new(slave);
-            close(slave);
+            handler_new(slave);
         }
         else
         {
@@ -132,7 +133,8 @@ server_acceptloop()
         }
     }
 
-    //handler_stopall();
+    handler_deleteall(lambda(int, (struct peer* p) { return 0 != p->p_tid;}));
+    handler_destroy();
 
     return NULL;
 }
