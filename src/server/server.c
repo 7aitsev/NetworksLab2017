@@ -28,7 +28,7 @@ struct serverdata
 static struct serverdata this;
 
 static int
-server_bind(struct addrinfo* servinfo)
+trybind(struct addrinfo* servinfo)
 {
     struct addrinfo* p;
     int yes = 1;
@@ -88,7 +88,7 @@ server_prepare()
         return -1;
     }
 
-    if(0 <= (rv = server_bind(servinfo)))
+    if(0 <= (rv = trybind(servinfo)))
     {
         if(-1 == listen(rv, SERVER_BACKLOG))
         {
@@ -110,7 +110,7 @@ server_acceptloop()
     socklen_t addrsize = sizeof(sa_peer);
 
     handler_init();
-    this.isrunning = 1;
+    __sync_fetch_and_or(&this.isrunning, 1);
     while(1)
     {
         slave = accept(master, (struct sockaddr*) &sa_peer, &addrsize);
@@ -121,7 +121,7 @@ server_acceptloop()
         }
         else
         {
-            if(!this.isrunning)
+            if(!__sync_and_and_fetch(&this.isrunning, 1))
             {
                 break;
             }
@@ -133,7 +133,6 @@ server_acceptloop()
         }
     }
 
-    handler_deleteall(lambda(int, (struct peer* p) { return 0 != p->p_tid;}));
     handler_destroy();
 
     return NULL;
@@ -152,7 +151,7 @@ server_run()
 void
 server_stop()
 {
-    --this.isrunning;
+    __sync_fetch_and_and(&this.isrunning, 0);
     shutdown(this.listensocket, SHUT_RDWR);
     close(this.listensocket);
 }

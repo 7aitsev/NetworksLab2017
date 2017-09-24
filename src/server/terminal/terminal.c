@@ -1,6 +1,5 @@
 #include "logger/logger.h"
 #include "server/handler/handler.h"
-#include "server/peer/peer.h"
 #include "server/terminal/terminal.h"
 
 #include <pthread.h>
@@ -44,7 +43,6 @@ terminal_loop()
     while(1)
     {
         fgets(inpline, cmdsize, stdin);
-        printf("fgets->%s", inpline);
         if(0 == strcmp(inpline, "q\n"))
         {
             terminal_action_quit();

@@ -1,6 +1,5 @@
 #include "logger/logger.h"
 #include "server/handler/handler.h"
-#include "server/peer/peer.h"
 
 #include <pthread.h>
 #include <stdlib.h>
@@ -35,6 +34,7 @@ void
 handler_destroy()
 {
     logger_log("[handler] destroing...\n");
+    handler_deleteall_if(&peer_isexist);
     free(g_peers);
     pthread_mutex_destroy(&g_lock);
 }
@@ -42,29 +42,13 @@ handler_destroy()
 int
 handler_getcurrent()
 {
-    int current;
-    pthread_mutex_lock(&g_lock);
-    current = g_current;
-    pthread_mutex_unlock(&g_lock);
-    return current;
+    return __sync_or_and_fetch(&g_current, 0);
 }
 
 int
 handler_gettotal()
 {
-    int total;
-    pthread_mutex_lock(&g_lock);
-    total = g_total;
-    pthread_mutex_unlock(&g_lock);
-    return total;
-}
-
-void
-peerleft()
-{
-    pthread_mutex_lock(&g_lock);
-    --g_current;
-    pthread_mutex_unlock(&g_lock);
+    return __sync_or_and_fetch(&g_total, 0);
 }
 
 static void*
@@ -83,55 +67,59 @@ handler_test(void* arg)
             break;
         }
 
-        logger_log("%d, recv:%s\n", sfd, buffer);
+        logger_log("[handler] %d, recv:%s\n", sfd, buffer);
 
         send(sfd, "I got your message", 18, 0);
     }
-    peer_shutdown(ppeer);
     pthread_detach(ppeer->p_tid);
-    peerleft();
-    memset(ppeer, 0, sizeof(struct peer));
+    peer_destroy(ppeer);
+    __sync_sub_and_fetch(&g_current, 1);
 
     return arg;
 }
 
-static void
+static int
 find_first_and_apply(int (*predicate)(struct peer* ppeer),
         void (*consumer)(struct peer* ppeer))
 {
-    for(int i = 0; i < g_peerslen; ++i)
+    const struct peer* peers_end = g_peerslen + g_peers;
+    for(struct peer* p = g_peers; peers_end != p; ++p)
     {
-        if(predicate(g_peers + i))
+        if(predicate(p))
         {
-            consumer(g_peers + i);
-            break;
+            consumer(p);
+            return 1;
         }
     }
+    return 0;
 }
 
-static void
+static int
 find_all_and_apply(int (*predicate)(struct peer* ppeer),
         void (*consumer)(struct peer* ppeer))
 {
-    for(int i = 0; i < g_peerslen; ++i)
+    int wasfound = 0;
+    const struct peer* peers_end = g_peerslen + g_peers;
+    for(struct peer* p = g_peers; peers_end != p; ++p)
     {
-        if(predicate(g_peers + i))
+        if(predicate(p))
         {
-            consumer(g_peers + i);
+            wasfound = 1;
+            consumer(p);
         }
     }
+    return wasfound;
 }
 
 static void
-delete_peer(struct peer* ppeer)
+deletepeer(struct peer* ppeer)
 {
-    logger_log("[handler] Deleting the peer: sfd=%d, tid=%d\n",
-            ppeer->p_sfd, ppeer->p_tid);
-    --g_current;
+    logger_log("[handler] Deleting the peer #%d: sfd=%d, tid=%u\n",
+            ppeer->p_id, ppeer->p_sfd, ppeer->p_tid);
+    __sync_sub_and_fetch(&g_current, 1);
     pthread_cancel(ppeer->p_tid);
     pthread_join(ppeer->p_tid, NULL);
-    peer_shutdown(ppeer);
-    memset(ppeer, 0, sizeof(struct peer));
+    peer_destroy(ppeer);
 }
 
 void
@@ -139,35 +127,39 @@ handler_new(int sfd)
 {
     pthread_mutex_lock(&g_lock);
     logger_log("[handler] new peer sfd=%d\n", sfd);
-    find_first_and_apply(
-            lambda(int, (struct peer* p) { return 0 == p->p_tid; }),
+    int isfound = find_first_and_apply(
+            &peer_isnotexist,
             lambda(void, (struct peer* p)
                 {
-                    if(NULL != p)
-                    {
-                        p->p_sfd = sfd;
-                        pthread_create(&p->p_tid, NULL, handler_test, p);
-                    }
+                    p->p_sfd = sfd;
+                    p->p_id = __sync_add_and_fetch(&g_total, 1);
+                    __sync_add_and_fetch(&g_current, 1);
+                    pthread_create(&p->p_tid, NULL, handler_test, p);
                 })
         );
+    if(!isfound)
+    {
+        logger_log("[handler] Reached the peers limit\n");
+        peer_closesocket(sfd);
+    }
     pthread_mutex_unlock(&g_lock);
 }
 
 void
-handler_deletefirst(int (*predicate)(struct peer* ppeer))
+handler_deletefirst_if(int (*predicate)(struct peer* ppeer))
 {
     pthread_mutex_lock(&g_lock);
     logger_log("[handler] delete first\n");
-    find_first_and_apply(predicate, &delete_peer);
+    find_first_and_apply(predicate, &deletepeer);
     pthread_mutex_unlock(&g_lock);
 }
 
 void
-handler_deleteall(int (*predicate)(struct peer* ppeer))
+handler_deleteall_if(int (*predicate)(struct peer* ppeer))
 {
     pthread_mutex_lock(&g_lock);
     logger_log("[handler] delete all\n");
-    find_all_and_apply(predicate, &delete_peer);
+    find_all_and_apply(predicate, &deletepeer);
     pthread_mutex_unlock(&g_lock);
 }
 
@@ -176,18 +168,6 @@ handler_foreach(void (*cb)(struct peer* p))
 {
     pthread_mutex_lock(&g_lock);
     logger_log("[handler] foreach\n");
-    find_all_and_apply(
-            lambda(int, (struct peer* p) { return 0 != p->p_tid; }),
-            cb
-        );
+    find_all_and_apply(&peer_isexist, cb);
     pthread_mutex_unlock(&g_lock);
 }
-
-/*
-static void
-handler_join_cb(void* arg)
-{
-    struct peer* p = (struct peer*) arg;
-    logger_log("[handler] handler_join_cb\n");
-    pthread_join(p->p_tid, NULL);
-}*/

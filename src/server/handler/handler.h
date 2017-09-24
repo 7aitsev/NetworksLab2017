@@ -1,7 +1,7 @@
 #ifndef HANDLER_H
 #define HANDLER_H
 
-#include "server/peer/peer.h"
+#include "server/handler/peer/peer.h"
 
 #define lambda(return_type, function_body) \
 ({ \
@@ -25,10 +25,10 @@ int
 handler_gettotal();
 
 void
-handler_deletefirst(int (*predicate)(struct peer* ppeer));
+handler_deletefirst_if(int (*predicate)(struct peer* ppeer));
 
 void
-handler_deleteall(int (*predicate)(struct peer* ppeer));
+handler_deleteall_if(int (*predicate)(struct peer* ppeer));
 
 void
 handler_foreach(void (*consumer)(struct peer* ppeer));
