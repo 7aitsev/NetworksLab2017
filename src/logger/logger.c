@@ -41,7 +41,7 @@ swapbufs(char** a, char** b)
 static void
 waitfor(int* condition)
 {
-    while(1 == *condition)
+    while(1 == __sync_and_and_fetch(condition, 1))
     {
         usleep(LOGGER_SLEEP_TIME);
     }
@@ -107,7 +107,7 @@ logger_loop(void* p_logdata)
             pthread_testcancel();
         }
         fprintf(stdout, ld->ld_buffer);
-        ld->ld_isready = 0;
+        __sync_and_and_fetch(&ld->ld_isready, 0);
         pthread_mutex_unlock(&ld->ld_mx);
     }
 
@@ -118,7 +118,7 @@ static void
 logger_data_init(struct logdata* logbundle)
 {
     logbundle->ld_isready = 0;
-    logbundle->ld_buffer = (char*) malloc(2 * LOGGER_BUFFER_SIZE); 
+    logbundle->ld_buffer = (char*) (logbundle + sizeof(struct logdata));
 
     pthread_mutex_init(&logbundle->ld_mx, NULL);
     pthread_cond_init(&logbundle->ld_cv, NULL);
@@ -130,7 +130,7 @@ logger_init()
     struct logger* p = &g_logger;
     if(0 == p->l_tid)
     {
-        p->l_ld = (struct logdata*) malloc(sizeof(struct logdata));
+        p->l_ld = malloc(sizeof(struct logdata) + 2 * LOGGER_BUFFER_SIZE);
         logger_data_init(p->l_ld);
 
         p->l_buflen = 0;
@@ -181,8 +181,6 @@ void
 logger_destroy()
 {
     struct logger* p = &g_logger;
-    char* bufone = p->l_ld->ld_buffer;
-    char* buftwo = p->l_buffer;
     
     logger_flush();
 
@@ -192,7 +190,7 @@ logger_destroy()
     pthread_mutex_unlock(&p->l_ld->ld_mx);
     pthread_join(p->l_tid, NULL);
 
-    free(buftwo - bufone > 0 ? bufone : buftwo);
     logger_data_destroy(p->l_ld);
     pthread_spin_destroy(&p->l_sp);
+    free(p->l_ld);
 }
