@@ -18,10 +18,10 @@ handler_destroy();
 void
 handler_new(int sfd);
 
-int
+peer_t
 handler_getcurrent();
 
-int
+peer_t
 handler_gettotal();
 
 void
@@ -32,5 +32,13 @@ handler_deleteall_if(int (*predicate)(struct peer* ppeer));
 
 void
 handler_foreach(void (*consumer)(struct peer* ppeer));
+
+int
+handler_find_first_and_apply(int (*predicate)(struct peer* ppeer),
+        void (*consumer)(struct peer* ppeer));
+
+int
+handler_fina_all_and_apply(int (*predicate)(struct peer* ppeer),
+        void (*consumer)(struct peer* ppeer));
 
 #endif
