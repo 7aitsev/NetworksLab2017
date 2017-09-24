@@ -1,5 +1,5 @@
 #include "logger/logger.h"
-#include "server/peer/peer.h"
+#include "server/handler/peer/peer.h"
 
 #include <arpa/inet.h>
 #include <stdio.h>
@@ -51,8 +51,27 @@ peer_setargs(struct peer* p,
 }
 
 void
-peer_shutdown(struct peer* p)
+peer_destroy(struct peer* p)
 {
-    shutdown(p->p_sfd, SHUT_RDWR);
-    close(p->p_sfd);
+    peer_closesocket(p->p_sfd);
+    memset(p, 0, sizeof(struct peer));
+}
+
+int
+peer_isexist(struct peer* p)
+{
+    return 0 != p->p_tid;
+}
+
+int
+peer_isnotexist(struct peer* p)
+{
+    return 0 == p->p_tid;
+}
+
+void
+peer_closesocket(int sfd)
+{
+    shutdown(sfd, SHUT_RDWR);
+    close(sfd);
 }

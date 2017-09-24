@@ -23,6 +23,15 @@ peer_setargs(struct peer* p,
         const peer_t id, const pthread_t tid, const int sfd);
 
 void
-peer_shutdown(struct peer* p);
+peer_destroy(struct peer* p);
+
+int
+peer_isexist(struct peer* p);
+
+int
+peer_isnotexist(struct peer* p);
+
+void
+peer_closesocket(int sfd);
 
 #endif
