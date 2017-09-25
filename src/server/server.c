@@ -1,3 +1,4 @@
+#include "config/config.h"
 #include "logger/logger.h"
 #include "server/handler/handler.h"
 #include "server/server.h"
@@ -12,23 +13,55 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
-#define SERVER_HOST NULL
-#define SERVER_PORT "5001"
-#define SERVER_BACKLOG 5
-
 struct serverdata
 {
     char* host;
     char* port;
+    int backlog;
+    int proto;
+    int socktype;
+
     int isrunning;
-    int listensocket;
+    int sockethndl;
     pthread_t accept_tid;
+
+    void (*runserver)(void);
+    void (*stopserver)(void);
+    void (*joinserver)(void);
 };
 
 static struct serverdata this;
 
+#define is_udp() (this.proto == IPPROTO_UDP)
+#define is_tcp() (this.proto == IPPROTO_TCP)
+
+void
+server_sethost(char* hostname)
+{
+    this.host = hostname;
+}
+
+void
+server_setport(char* port)
+{
+    this.port = port;
+}
+
+void
+server_setbacklog(int backlog)
+{
+    this.backlog = backlog;
+}
+
+void
+server_setprotocol(int proto)
+{
+    this.proto = (proto == SERVER_UDP) ? IPPROTO_UDP : IPPROTO_TCP;
+    this.socktype = (proto == SERVER_UDP) ? SOCK_DGRAM : SOCK_STREAM;
+}
+
 static int
-trybind(struct addrinfo* servinfo)
+trybind(struct addrinfo* servinfo, int* binded_socket)
 {
     struct addrinfo* p;
     int yes = 1;
@@ -62,24 +95,23 @@ trybind(struct addrinfo* servinfo)
     }
 
     freeaddrinfo(servinfo);
-    return sfd;
+    *binded_socket = sfd;
+    return 0;
 }
 
 int
-server_prepare()
+prepare_server()
 {
     int rv;
+    int sfd = -1;
     struct addrinfo hints;
     struct addrinfo* servinfo;
 
-    this.host = SERVER_HOST;
-    this.port = SERVER_PORT;
-
     memset(&hints, 0, sizeof(hints));
     hints.ai_family = AF_INET;
-    hints.ai_socktype = SOCK_STREAM;
+    hints.ai_socktype = this.socktype;
     hints.ai_flags = AI_PASSIVE;
-    hints.ai_protocol = IPPROTO_TCP;
+    hints.ai_protocol = this.proto;
 
     rv = getaddrinfo(this.host, this.port, &hints, &servinfo);
     if(0 != rv)
@@ -88,16 +120,18 @@ server_prepare()
         return -1;
     }
 
-    if(0 <= (rv = trybind(servinfo)))
+    rv = trybind(servinfo, &sfd);
+    if(0 == rv && is_tcp())
     {
-        if(-1 == listen(rv, SERVER_BACKLOG))
+        rv = listen(sfd, this.backlog); 
+        if(-1 == rv)
         {
             logger_log("[server] listen: %s\n", strerror(errno));
             return -1;
         }
-        this.listensocket = rv;
     }
 
+    this.sockethndl = sfd;
     return rv;
 }
 
@@ -105,7 +139,7 @@ static void*
 server_acceptloop()
 {
     int slave;
-    int master = this.listensocket;
+    int master = this.sockethndl;
     struct sockaddr_storage sa_peer;
     socklen_t addrsize = sizeof(sa_peer);
 
@@ -139,26 +173,115 @@ server_acceptloop()
 }
 
 void
-server_run()
+run_tcp_server()
 {
-    pthread_create(&this.accept_tid, NULL,
-            server_acceptloop, &this.listensocket);
+    pthread_create(&this.accept_tid, NULL, server_acceptloop, NULL);
 
     terminal_setstopservercb(&server_stop);
     terminal_run();
 }
 
 void
-server_stop()
+stop_tcp_server()
 {
     __sync_fetch_and_and(&this.isrunning, 0);
-    shutdown(this.listensocket, SHUT_RDWR);
-    close(this.listensocket);
+    shutdown(this.sockethndl, SHUT_RDWR);
+    close(this.sockethndl);
+}
+
+void
+join_tcp_server()
+{
+    pthread_join(this.accept_tid, NULL);
+    terminal_join();
+}
+
+void
+run_udp_server()
+{
+    int bytes;
+    char buf[100];
+    struct sockaddr_storage thathost;
+    socklen_t thathost_len = sizeof(thathost);
+    while(1)
+    {
+        bytes = recvfrom(this.sockethndl, buf, sizeof(buf), 0,
+                         (struct sockaddr*) &thathost, &thathost_len);
+        if(0 < bytes)
+        {
+            buf[bytes] = '\0';
+            if(0 != strcmp(buf, "OFF\n"))
+            {
+                logger_log("[udp] %d, recv:%s\n", this.sockethndl, buf);
+            }
+            else
+            {
+                break;
+            }
+
+            sendto(this.sockethndl, "I got your message", 18, MSG_NOSIGNAL,
+                   (struct sockaddr*) &thathost, thathost_len);
+        }
+        else if(0 == bytes)
+        {
+            break;
+        }
+        else
+        {
+            logger_log("[udp] recvfrom failed: %s\n", strerror(errno));
+            break;
+        }
+    }
+}
+
+void
+stop_udp_server()
+{
+    logger_log("[server] stop udp server\n");
+}
+
+void
+join_udp_server()
+{
+    logger_log("[server] join udp server\n");
+}
+
+void
+server_run()
+{
+    this.runserver();
+}
+
+void
+server_stop()
+{
+    this.stopserver();
 }
 
 void
 server_join()
 {
-    pthread_join(this.accept_tid, NULL);
-    terminal_join();
+    this.joinserver();
+}
+
+int
+server_prepare()
+{
+    logger_log("[config] arguments\n"
+            "\ttype=%d, host=%s, port=%s, backlog=%d\n",
+            this.proto, this.host, this.port, this.backlog);
+
+    switch(this.proto)
+    {
+        case IPPROTO_TCP:
+            this.runserver = &run_tcp_server;
+            this.stopserver = &stop_tcp_server;
+            this.joinserver = &join_tcp_server; 
+            break;
+        default:
+            this.runserver = &run_udp_server;
+            this.stopserver = &stop_udp_server;
+            this.joinserver = &join_udp_server;
+    }
+    return prepare_server();
 }

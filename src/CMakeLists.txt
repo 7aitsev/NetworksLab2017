@@ -1,19 +1,19 @@
 cmake_minimum_required(VERSION 2.8)
-project(triv_mtp_tcp_serv)
+project(inet_apps)
 
-set(CMAKE_C_FLAGS "-Wall -Wextra -pthread -D_GNU_SOURCE")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wextra -pthread")
 
-set(_MODULES "./logger ./server/handler/peer ./server/handler ./server/terminal ./server ")
-#message("${_MODULES}")
-string(REGEX REPLACE "(([a-z]+) )" "\\2/\\2.\# " MODULES ${_MODULES})
+set(MODULES "./logger ./config ./server/handler/peer ./server/handler ./server/terminal ./server ")
 #message("${MODULES}")
-string(REPLACE "\# " "c;" SOURCES ${MODULES})
+string(REGEX REPLACE "(([a-z]+) )" "\\2/\\2.c;" SOURCES ${MODULES})
 #message("${SOURCES}")
-string(REPLACE "\# " "h;" HEADERS ${MODULES})
+string(REPLACE ".c" ".h;" HEADERS ${SOURCES})
 #message("${HEADERS}")
 
 include_directories(.)
 
-add_executable(triv_mtp_tcp_serv main.c ${SOURCES} ${HEADERS})
+add_executable(server main.c ${SOURCES} ${HEADERS})
 
-target_link_libraries(triv_mtp_tcp_serv pthread)
+#add_executable(client client/main.c ${CLIENT_SOURCES} ${CLIENT_HEADERS} ${DEPS})
+
+#target_compile_definitions(triv_udp_serv PRIVATE -D_UDP_SERVER)

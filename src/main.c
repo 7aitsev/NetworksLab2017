@@ -1,10 +1,13 @@
+#include "config/config.h"
 #include "logger/logger.h"
 #include "server/server.h"
 
 int
-main(void)
+main(int argc, char** argv)
 {
     logger_init();
+
+    config_server(argc, argv);
 
     if(-1 != server_prepare())
     {
@@ -13,7 +16,7 @@ main(void)
     }
     else
     {
-        logger_log("[main] server has not start\n");
+        logger_log("[main] server has not started\n");
     }
 
     server_join();
