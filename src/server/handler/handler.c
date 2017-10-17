@@ -1,3 +1,5 @@
+#include "lib/efunc.h"
+#include "lib/termproto.h"
 #include "logger/logger.h"
 #include "server/handler/handler.h"
 
@@ -72,22 +74,39 @@ handler_test(void* arg)
     pthread_mutex_unlock(&g_lock);
 
     int sfd = p.p_sfd;
-    char buffer[100];
+    size_t len = TERMPROTO_BUF_SIZE;
+    char* buffer = malloc(len);
 
-    while(1)
+    if(NULL != buffer)
     {
-        int n = recv(sfd, buffer, 99, 0);
-        buffer[n] = '\0';
-        if(n == 0)
+        while(1)
         {
-            break;
+            memset(buffer, 0, len);
+            int rv = readcrlf(sfd, buffer, len);
+            if(0 < rv)
+            {
+                term_mk_resp(sfd, buffer);
+            }
+            else if(0 == rv)
+            {
+                logger_log("[handler] client %hd hung up\n", p.p_id);
+                break;
+            }
+            else
+            {
+                logger_log("[handler] readcrlf: %s\n", strerror(errno));
+                break;
+            }
         }
-
-        logger_log("[test] %d, recv:%s\n", sfd, buffer);
-
-        send(sfd, "I got your message\n", 19, 0);
+    }
+    else
+    {
+        logger_log("[handler] malloc failed: %s\n",
+                strerror(errno));
     }
     
+    free(buffer);
+
     pthread_detach(p.p_tid);
     handler_find_first_and_apply(
             lambda(int, (struct peer* predic)

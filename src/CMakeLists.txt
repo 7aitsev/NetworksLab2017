@@ -1,7 +1,10 @@
 cmake_minimum_required(VERSION 2.8)
-project(triv_mtp_tcp_serv)
+project(tcp_service)
 
 set(CMAKE_C_FLAGS "-Wall -Wextra -pthread -D_GNU_SOURCE")
+
+set(DEPS_H ./lib/efunc.h ./lib/termproto.h)
+set(DEPS_S ./lib/efunc.c ./lib/termproto.c)
 
 set(_MODULES "./logger ./server/handler/peer ./server/handler ./server/terminal ./server ")
 #message("${_MODULES}")
@@ -14,6 +17,9 @@ string(REPLACE "\# " "h;" HEADERS ${MODULES})
 
 include_directories(.)
 
-add_executable(triv_mtp_tcp_serv main.c ${SOURCES} ${HEADERS})
+list(APPEND SOURCES ${DEPS_S})
+list(APPEND HEADERS ${DEPS_H})
 
-target_link_libraries(triv_mtp_tcp_serv pthread)
+add_executable(server main.c ${SOURCES} ${HEADERS})
+
+target_link_libraries(server pthread)
