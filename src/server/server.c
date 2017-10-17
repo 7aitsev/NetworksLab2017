@@ -12,14 +12,12 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
-#define SERVER_HOST NULL
-#define SERVER_PORT "5001"
 #define SERVER_BACKLOG 5
 
 struct serverdata
 {
-    char* host;
-    char* port;
+    const char* host;
+    const char* port;
     int isrunning;
     int listensocket;
     pthread_t accept_tid;
@@ -55,7 +53,7 @@ trybind(struct addrinfo* servinfo)
         close(sfd);
     }
 
-    if(p == NULL)
+    if(NULL == p)
     {
         logger_log("[server] Could not bind: %s\n", strerror(errno));
         return -1;
@@ -66,14 +64,14 @@ trybind(struct addrinfo* servinfo)
 }
 
 int
-server_prepare()
+server_prepare(const char* host, const char* port)
 {
     int rv;
     struct addrinfo hints;
     struct addrinfo* servinfo;
 
-    this.host = SERVER_HOST;
-    this.port = SERVER_PORT;
+    this.host = host;
+    this.port = port;
 
     memset(&hints, 0, sizeof(hints));
     hints.ai_family = AF_INET;

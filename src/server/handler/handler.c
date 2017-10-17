@@ -1,6 +1,7 @@
 #include "logger/logger.h"
 #include "server/handler/handler.h"
 
+#include <errno.h>
 #include <pthread.h>
 #include <stdlib.h>
 #include <string.h>
@@ -18,8 +19,8 @@ static peer_t g_total;
 static peer_t g_peerslen;
 static struct peer* g_peers;
 #define DOUBLE_LENGTH ((g_peerslen << 1) >= HANDLER_PEERS_LIMIT \
-                                         ? HANDLER_PEERS_LIMIT \
-                                         : g_peerslen << 1)
+                                          ? HANDLER_PEERS_LIMIT \
+                                          : g_peerslen << 1)
 
 static pthread_mutex_t g_lock;
 
@@ -37,7 +38,7 @@ void
 handler_destroy()
 {
     logger_log("[handler] destroing...\n");
-    handler_deleteall_if(&peer_isexist);
+    handler_delete_all_if(&peer_isexist);
     free(g_peers);
     pthread_mutex_destroy(&g_lock);
 }
@@ -84,7 +85,7 @@ handler_test(void* arg)
 
         logger_log("[test] %d, recv:%s\n", sfd, buffer);
 
-        send(sfd, "I got your message", 18, 0);
+        send(sfd, "I got your message\n", 19, 0);
     }
     
     pthread_detach(p.p_tid);
@@ -164,7 +165,7 @@ handler_realloc(peer_t newlen)
     }
     else
     {
-        logger_log("[handler] realloc failed\n");
+        logger_log("[handler] realloc failed: %s\n", strerror(errno));
         return -1;
     }
 }
@@ -229,7 +230,7 @@ handler_new(int sfd)
 }
 
 void
-handler_deletefirst_if(int (*predicate)(struct peer* ppeer))
+handler_delete_first_if(int (*predicate)(struct peer* ppeer))
 {
     pthread_mutex_lock(&g_lock);
     logger_log("[handler] delete first\n");
@@ -238,7 +239,7 @@ handler_deletefirst_if(int (*predicate)(struct peer* ppeer))
 }
 
 void
-handler_deleteall_if(int (*predicate)(struct peer* ppeer))
+handler_delete_all_if(int (*predicate)(struct peer* ppeer))
 {
     pthread_mutex_lock(&g_lock);
     logger_log("[handler] delete all\n");

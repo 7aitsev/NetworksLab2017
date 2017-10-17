@@ -25,10 +25,10 @@ peer_t
 handler_gettotal();
 
 void
-handler_deletefirst_if(int (*predicate)(struct peer* ppeer));
+handler_delete_first_if(int (*predicate)(struct peer* ppeer));
 
 void
-handler_deleteall_if(int (*predicate)(struct peer* ppeer));
+handler_delete_all_if(int (*predicate)(struct peer* ppeer));
 
 void
 handler_foreach(void (*consumer)(struct peer* ppeer));

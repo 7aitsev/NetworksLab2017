@@ -33,9 +33,20 @@ terminal_action_show_status()
     handler_foreach(&peer_printinfo);
 }
 
+static void
+terminal_action_kill(peer_t peer)
+{
+    logger_log("[terminal] kill %hd\n", peer);
+    handler_delete_first_if(
+            lambda(int, (struct peer* p)
+                {return p->p_id == peer;}
+            ));
+}
+
 static void*
 terminal_loop()
 {
+    peer_t peer;
     int cmdsize = 10;
     char inpline[cmdsize];
 
@@ -51,6 +62,10 @@ terminal_loop()
         else if(0 == strcmp(inpline, "status\n"))
         {
             terminal_action_show_status();
+        }
+        else if(1 == sscanf(inpline, "k %hd\n", &peer))
+        {
+            terminal_action_kill(peer);
         }
     }
 
