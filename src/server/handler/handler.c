@@ -1,7 +1,6 @@
-#include "lib/efunc.h"
-#include "lib/termproto.h"
 #include "logger/logger.h"
 #include "server/handler/handler.h"
+#include "server/service/service.h"
 
 #include <errno.h>
 #include <pthread.h>
@@ -58,10 +57,9 @@ handler_gettotal()
 }
 
 static void*
-handler_test(void* arg)
+handler_service(void* arg)
 {
     pthread_mutex_lock(&g_lock);
-    struct peer p;
     struct peer* ppeer = (struct peer*) arg;
     if(peer_isnotexist(ppeer))
     {
@@ -70,51 +68,18 @@ handler_test(void* arg)
         pthread_mutex_unlock(&g_lock);
         return arg;
     }
-    peer_set(&p, ppeer);
     pthread_mutex_unlock(&g_lock);
 
-    int sfd = p.p_sfd;
-    size_t len = TERMPROTO_BUF_SIZE;
-    char* buffer = malloc(len);
+    service(ppeer);
 
-    if(NULL != buffer)
-    {
-        while(1)
-        {
-            memset(buffer, 0, len);
-            int rv = readcrlf(sfd, buffer, len);
-            if(0 < rv)
-            {
-                term_mk_resp(sfd, buffer);
-            }
-            else if(0 == rv)
-            {
-                logger_log("[handler] client %hd hung up\n", p.p_id);
-                break;
-            }
-            else
-            {
-                logger_log("[handler] readcrlf: %s\n", strerror(errno));
-                break;
-            }
-        }
-    }
-    else
-    {
-        logger_log("[handler] malloc failed: %s\n",
-                strerror(errno));
-    }
-    
-    free(buffer);
-
-    pthread_detach(p.p_tid);
+    pthread_detach(ppeer->p_tid);
     handler_find_first_and_apply(
             lambda(int, (struct peer* predic)
-                {return p.p_id == predic->p_id;}
+                {return ppeer->p_id == predic->p_id;}
             ),
             lambda(void, (struct peer* pp)
                 {
-                    logger_log("[test] Deleting #%d: sfd=%d, tid=%u\n",
+                    logger_log("[handler] Deleting #%d: sfd=%d, tid=%u\n",
                             pp->p_id, pp->p_sfd, pp->p_tid);
                     __sync_sub_and_fetch(&g_current, 1);
                     peer_destroy(pp);
@@ -224,7 +189,7 @@ handler_new(int sfd)
                         p->p_sfd = sfd;
                         p->p_id = __sync_add_and_fetch(&g_total, 1);
                         __sync_add_and_fetch(&g_current, 1);
-                        pthread_create(&p->p_tid, NULL, handler_test, p);
+                        pthread_create(&p->p_tid, NULL, handler_service, p);
                     })
             );
         if(isfound)

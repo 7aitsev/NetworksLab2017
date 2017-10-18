@@ -2,7 +2,7 @@
 #define SERVER_H
 
 int
-server_prepare();
+server_prepare(const char* host, const char* port);
 
 void
 server_run();

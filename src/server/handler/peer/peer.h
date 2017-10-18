@@ -3,6 +3,10 @@
 
 #include <pthread.h>
 
+#define PEER_NO_PERMS 0
+#define PEER_REGULAR 1
+#define PEER_SUPER 2
+
 typedef unsigned short int peer_t;
 
 struct peer
@@ -10,17 +14,16 @@ struct peer
     peer_t p_id;
     pthread_t p_tid;
     int p_sfd;
+    char* p_buffer;
+    size_t p_buflen;
+
+    /* could be accessed from multiple threads */
+    char* p_username;
+    char p_mode;
 };
     
 void
 peer_printinfo(struct peer* p);
-
-void
-peer_set(struct peer* to, const struct peer* from);
-
-void
-peer_setargs(struct peer* p,
-        const peer_t id, const pthread_t tid, const int sfd);
 
 void
 peer_destroy(struct peer* p);
@@ -33,5 +36,8 @@ peer_isnotexist(struct peer* p);
 
 void
 peer_closesocket(int sfd);
+
+void
+peer_handle(struct peer* p);
 
 #endif

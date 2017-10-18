@@ -1,4 +1,3 @@
-#include "lib/efunc.h"
 #include "lib/termproto.h"
 #include "logger/logger.h"
 
@@ -8,7 +7,7 @@
 #include <string.h>
 
 const char * const TERM_METHOD_STRING[] = {
-    "AUTH", "LS", "KILL", "WHO", "LOGOUT"
+    "AUTH", "LS", "CD", "KILL", "WHO", "LOGOUT"
 };
 
 const char * const TERM_STATUS_ALL[] = {
@@ -16,10 +15,11 @@ const char * const TERM_STATUS_ALL[] = {
     "400", "Bad Request",
     "403", "Forbidden",
     "404", "Not Found",
+    "408", "Request Timeout",
     "500", "Internal Server Error",
 };
 
-int
+static int
 isstrin(const char* str, const char * const set[], size_t latest_el)
 {
     size_t i;
@@ -37,25 +37,25 @@ isstrin(const char* str, const char * const set[], size_t latest_el)
     }
 }
 
-int
-fill_term_req(struct TERM_REQ* term_req, const char* method, char* path)
+static int
+fill_term_req(struct term_req* req, const char* method, char* path)
 {
     int rv;
     
-    if(-1 == (rv = isstrin(method, TERM_METHOD_STRING, HEAD)))
+    if(-1 == (rv = isstrin(method, TERM_METHOD_STRING, LOGOUT)))
     {
-        term_req->status = BAD_REQUEST;
+        req->status = BAD_REQUEST;
         return -1;
     }
-    term_req->method = rv;
+    req->method = rv;
 
-    memset(term_req->path, 0, TERMPROTO_PATH_SIZE);
-    strncpy(term_req->path, path, TERMPROTO_PATH_SIZE);
-    if(term_req->path[TERMPROTO_PATH_SIZE - 1] != '\0')
+    memset(req->path, 0, TERMPROTO_PATH_SIZE);
+    strncpy(req->path, path, TERMPROTO_PATH_SIZE);
+    if(req->path[TERMPROTO_PATH_SIZE - 1] != '\0')
     {
         // path is too long, but the request itself is ok
-        term_req->status = INTERNAL_ERROR;
-        term_req->path[TERMPROTO_PATH_SIZE - 1] = '\0';
+        req->status = INTERNAL_ERROR;
+        req->path[TERMPROTO_PATH_SIZE - 1] = '\0';
         return -1;
     }
     free(path);
@@ -64,67 +64,46 @@ fill_term_req(struct TERM_REQ* term_req, const char* method, char* path)
 }
 
 int
-parse_term_req(struct TERM_REQ* term_req, const char* req)
+term_parse_req(struct term_req* req, const char* buf)
 {
     char method[8];
     char* path = NULL;
 
     int rv;
     errno = 0;
-    if(2 == (rv = sscanf(req, "%7[A-Z] %ms", method, &path)))
+    if(2 == (rv = sscanf(buf, "%7[A-Z] %ms", method, &path)))
     {
-        return fill_term_req(term_req, method, path);
+        return fill_term_req(req, method, path);
     }
     else if(0 < rv)
     {
         logger_log("[termproto] Not all values were matched\n");
         free(path);
-        term_req->status = BAD_REQUEST;
+        req->status = BAD_REQUEST;
     }
-    else if(0 == rv && 0 == errno)
+    else if(0 == errno)
     {
         logger_log("[termproto] No matching values\n");
-        term_req->status = BAD_REQUEST;
+        req->status = BAD_REQUEST;
     }
     else
     {
-        logger_log("[termproto] sscanf failed: %d %s\n", rv, strerror(errno));
-        term_req->status = INTERNAL_ERROR;
+        logger_log("[termproto] sscanf failed: %s\n", strerror(errno));
+        req->status = INTERNAL_ERROR;
     }
     return -1;
 }
 
-void
-error_term(int sfd, struct TERM_REQ* req)
+size_t
+term_put_header(char* buf, size_t bufsize, enum TERM_STATUS status,
+        size_t size)
 {
-    char resp[32];
-    size_t size;
-
-    //size = put_term_header(resp, req, NULL);
-
-    sendall(sfd, resp, &size);
-}
-
-void
-do_term_resp(int sfd, struct TERM_REQ* req)
-{
-    size_t size = 28;
-    printf("method=%s\tpath=%s\n",
-            TERM_METHOD_STRING[req->method], req->path);
-    sendall(sfd, "200 OK\r\n\r15\nhello/\nworld.txt", &size);
-}
-
-void
-term_mk_resp(int sfd, const char* data)
-{
-    struct TERM_REQ treq;
-    
-    if(0 == parse_term_req(&treq, data))
+    size_t n;
+    n = snprintf(buf, bufsize, "%s %s\r\n", TERM_STATUS_ALL[status],
+            TERM_STATUS_ALL[status + 1]);
+    if(0 < size && n < bufsize)
     {
-        do_term_resp(sfd, &treq);
+        n += snprintf(buf + n, bufsize - n, "LENGTH: %ld\r\n\r\n", size);
     }
-    /*else
-    {
-        error_term(sfd, &treq);
-    }*/
+    return (n < bufsize) ? n : bufsize - 1;
 }

@@ -34,23 +34,6 @@ peer_printinfo(struct peer* p)
 }
 
 void
-peer_set(struct peer* to, const struct peer* from)
-{
-    to->p_id = from->p_id;
-    to->p_tid = from->p_tid;
-    to->p_sfd = from->p_sfd;
-}
-
-void
-peer_setargs(struct peer* p,
-        const peer_t id, const pthread_t tid, const int sfd)
-{
-    p->p_id = id;
-    p->p_tid = tid;
-    p->p_sfd = sfd;
-}
-
-void
 peer_destroy(struct peer* p)
 {
     peer_closesocket(p->p_sfd);

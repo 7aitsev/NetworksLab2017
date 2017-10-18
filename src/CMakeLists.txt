@@ -6,7 +6,7 @@ set(CMAKE_C_FLAGS "-Wall -Wextra -pthread -D_GNU_SOURCE")
 set(DEPS_H ./lib/efunc.h ./lib/termproto.h)
 set(DEPS_S ./lib/efunc.c ./lib/termproto.c)
 
-set(_MODULES "./logger ./server/handler/peer ./server/handler ./server/terminal ./server ")
+set(_MODULES "./logger ./server/handler/peer ./server/handler ./server/service ./server/terminal ./server ")
 #message("${_MODULES}")
 string(REGEX REPLACE "(([a-z]+) )" "\\2/\\2.\# " MODULES ${_MODULES})
 #message("${MODULES}")

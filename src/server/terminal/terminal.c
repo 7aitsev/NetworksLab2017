@@ -51,6 +51,7 @@ terminal_loop()
     char inpline[cmdsize];
 
     logger_log("[terminal] started\n");
+    printf("\n> ");
     while(1)
     {
         fgets(inpline, cmdsize, stdin);
@@ -67,6 +68,7 @@ terminal_loop()
         {
             terminal_action_kill(peer);
         }
+        printf("\n> ");
     }
 
     return NULL;
