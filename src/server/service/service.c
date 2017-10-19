@@ -6,11 +6,15 @@
 
 #include <dirent.h>
 #include <errno.h>
+#include <fcntl.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <sys/types.h>
+#include <unistd.h>
 
+#define DEFAULT_PATH "/"
 #define DB_ACCOUNTS "/tmp/accounts"
 
 static const char * const MSG_EMPTY = "";
@@ -60,7 +64,7 @@ find_in_db(FILE* fdb, const char* login, const char* pass)
 static void
 do_auth(struct peer* p, struct term_req* req)
 {
-    if(PEER_NO_PERMS == p->p_mode)
+    if(PEER_NO_PERMS == peer_get_mode(p))
     {
         char login[11];
         char pass[11];
@@ -75,9 +79,13 @@ do_auth(struct peer* p, struct term_req* req)
                 rv = find_in_db(db, login, pass);
                 if(rv != 0)
                 {
-                    p->p_mode = rv;
-                    p->p_username = malloc(11);
-                    strcpy(p->p_username, login);
+                    peer_set_mode(p, rv);
+                    peer_set_cwd(p, DEFAULT_PATH); // skip error checking
+                    handler_perform(p, lambda(void, (struct peer* pp)
+                    {
+                        pp->p_username = malloc(11);
+                        strcpy(p->p_username, login);
+                    }));
 
                     req->status = OK;
                     req->msg = AUTH_GRANTED;
@@ -89,6 +97,7 @@ do_auth(struct peer* p, struct term_req* req)
                     req->msg = AUTH_BAD_TRY;
                     logger_log("[service] bad login or pass\n");
                 }
+                fclose(db);
             }
             else
             {
@@ -112,14 +121,15 @@ do_auth(struct peer* p, struct term_req* req)
 }
 
 static int
-count_names_len(struct term_req* req)
+count_names_len(int fdcwd, struct term_req* req)
 {
     int cnt = 0;
     struct dirent* entry;
-    DIR* root = opendir(req->path);
+    DIR* root;
+    int dirfd = openat(fdcwd, req->path, O_RDONLY);
 
     req->status = OK;
-    if(NULL == root)
+    if(-1 == dirfd)
     {
         switch(errno)
         {
@@ -132,6 +142,17 @@ count_names_len(struct term_req* req)
             default:
                 req->status = INTERNAL_ERROR;
         }
+        return -1;
+    }
+
+    root = fdopendir(dirfd);
+    if(NULL == root)
+    {
+        if(ENOTDIR == errno)
+        {
+            req->status = NOT_DIR;
+        }
+        close(dirfd);
         return -1;
     }
 
@@ -154,13 +175,13 @@ do_ls(struct peer* p, struct term_req* req)
     struct dirent* entry;
     DIR* root;
 
-    int cnt = count_names_len(req);
-    if(cnt == -1)
+    int cnt = count_names_len(p->p_cwd, req);
+    if(-1 == cnt)
     {
         error_term(p->p_sfd, req);
+        logger_log("[service] cant read a dir: %s\n", strerror(errno));
         return;
     }
-
 
     size_t n = 0;
     size_t prev;
@@ -168,7 +189,7 @@ do_ls(struct peer* p, struct term_req* req)
     size_t bs = p->p_buflen;
 
     n = term_put_header(buf, bs, req->status, cnt);
-    root = opendir(req->path);
+    root = fdopendir(openat(p->p_cwd, req->path, O_RDONLY)); // so-so
     while(NULL != (entry = readdir(root)))
     {
         if(entry->d_name[0] != '.')
@@ -191,6 +212,39 @@ do_ls(struct peer* p, struct term_req* req)
 }
 
 static void
+do_cd(struct peer* p, struct term_req* req)
+{
+    int rv = peer_set_cwd(p, req->path);
+    if(0 == rv)
+    {
+        req->status = OK;
+        small_resp(p, req);
+        char buf[256];
+        logger_log("[service] chdir=%s\n", peer_get_cwd(p, buf, 256));
+    }
+    else
+    {
+        switch(errno)
+        {
+            case EACCES:
+                req->status = FORBIDDEN;
+                break;
+            case ENOENT:
+                req->status = NOT_FOUND;
+                break;
+            case ENOTDIR:
+                req->status = NOT_DIR;
+                break;
+            default:
+                req->status = INTERNAL_ERROR;
+        }
+        logger_log("[service] chdir failed: %s\n",
+                strerror(errno));
+        error_term(p->p_sfd, req);
+    }
+}
+
+static void
 handle_req(struct peer* p)
 {
     int rv;
@@ -209,12 +263,15 @@ handle_req(struct peer* p)
                     do_kill(p, &req);
             }
         } else */
-        if(PEER_NO_PERMS < p->p_mode)
+        if(PEER_NO_PERMS < peer_get_mode(p))
         {
             switch(req.method)
             {
                 case AUTH:
                     do_auth(p, &req);
+                    break;
+                case CD:
+                    do_cd(p, &req);
                     break;
                 case LS:
                     do_ls(p, &req);
@@ -246,9 +303,6 @@ service(struct peer* p)
     size_t len = TERMPROTO_BUF_SIZE;
     char* buffer = malloc(len);
 
-    p->p_mode = PEER_NO_PERMS;
-    p->p_username = NULL;
-
     if(NULL != buffer)
     {
         p->p_buffer = buffer;
@@ -278,7 +332,4 @@ service(struct peer* p)
     {
         logger_log("[peer] malloc failed: %s\n", strerror(errno));
     }
-    
-    free(buffer);
-    free(p->p_username);
 }

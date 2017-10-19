@@ -262,3 +262,13 @@ handler_fina_all_and_apply(int (*predicate)(struct peer* ppeer),
     pthread_mutex_unlock(&g_lock);
     return rv;
 }
+
+int
+handler_perform(struct peer* subj, void (*consumer)(struct peer* p))
+{
+    int rv;
+    pthread_mutex_lock(&g_lock);
+    consumer(subj);
+    pthread_mutex_unlock(&g_lock);
+    return rv;
+}

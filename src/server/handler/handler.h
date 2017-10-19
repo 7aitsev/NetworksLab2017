@@ -41,4 +41,7 @@ int
 handler_fina_all_and_apply(int (*predicate)(struct peer* ppeer),
         void (*consumer)(struct peer* ppeer));
 
+int
+handler_perform(struct peer* subj, void (*consumer)(struct peer* p));
+
 #endif

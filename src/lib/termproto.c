@@ -15,6 +15,7 @@ const char * const TERM_STATUS_ALL[] = {
     "400", "Bad Request",
     "403", "Forbidden",
     "404", "Not Found",
+    "405", "Not a Directory",
     "408", "Request Timeout",
     "500", "Internal Server Error",
 };

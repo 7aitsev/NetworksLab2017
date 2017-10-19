@@ -2,9 +2,14 @@
 #include "server/handler/peer/peer.h"
 
 #include <arpa/inet.h>
+#include <errno.h>
+#include <fcntl.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 #include <unistd.h>
 
 void
@@ -37,6 +42,9 @@ void
 peer_destroy(struct peer* p)
 {
     peer_closesocket(p->p_sfd);
+    close(p->p_cwd);
+    free(p->p_username);
+    free(p->p_buffer);
     memset(p, 0, sizeof(struct peer));
 }
 
@@ -57,4 +65,83 @@ peer_closesocket(int sfd)
 {
     shutdown(sfd, SHUT_RDWR);
     close(sfd);
+}
+
+char
+peer_get_mode(struct peer* p)
+{
+    return __sync_or_and_fetch(&p->p_mode, 0);
+}
+
+void
+peer_set_mode(struct peer* p, char mode)
+{
+    __sync_add_and_fetch(&p->p_mode, mode);
+}
+
+static inline int
+peer_get_fdcwd(struct peer* p)
+{
+    return __sync_fetch_and_or(&p->p_cwd, 0);
+}
+
+char*
+peer_get_cwd(struct peer* p, char* rpath, size_t rplen)
+{
+    char path[rplen];
+    int fdcwd = peer_get_fdcwd(p);
+
+    sprintf(path, "/proc/self/fd/%d", fdcwd);
+    memset(rpath, 0, rplen);
+    if(-1 != readlink(path, rpath, rplen - 1))
+    {
+        return rpath;
+    }
+    logger_log("[peer] readlink error: %s\n", strerror(errno));
+    return NULL;
+}
+
+/**
+ * Invokes only from the <service> module which is the only one
+ * who can modify cwd. So it is safe to read p->p_cwd from the module,
+ * but not to modify, because other threads may be reading at the same
+ * moment. Other threads have to use thread-safety methods to read p_cwd.
+ */
+int
+peer_set_cwd(struct peer* p, const char* path)
+{
+    int dirfd;
+
+    if(STDIN_FILENO == p->p_cwd)
+    {
+        dirfd = open(path, O_RDONLY);
+        if(-1 == dirfd)
+        {
+            return -1;
+        }
+        __sync_add_and_fetch(&p->p_cwd, dirfd);
+    }
+    else
+    {
+        struct stat path_stat;
+
+        dirfd = openat(p->p_cwd, path, O_RDONLY);
+        if(-1 == dirfd)
+        {
+            return -1;
+        }
+        
+        fstat(dirfd, &path_stat);
+        if(!S_ISDIR(path_stat.st_mode))
+        {
+            errno = ENOTDIR;
+            return -1;
+        }
+
+        errno = 0;
+        int rv = dup2(dirfd, p->p_cwd); // assume this doesn't fail
+        logger_log("[peer] dup2: %s", strerror(errno));
+        close(dirfd);
+    }
+    return 0;
 }

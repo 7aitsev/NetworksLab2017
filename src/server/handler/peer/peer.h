@@ -17,9 +17,10 @@ struct peer
     char* p_buffer;
     size_t p_buflen;
 
-    /* could be accessed from multiple threads */
+    /* could be modified from multiple threads */
     char* p_username;
     char p_mode;
+    int p_cwd;
 };
     
 void
@@ -39,5 +40,17 @@ peer_closesocket(int sfd);
 
 void
 peer_handle(struct peer* p);
+
+char
+peer_get_mode(struct peer* p);
+
+void
+peer_set_mode(struct peer* p, char mode);
+
+char*
+peer_get_cwd(struct peer* p, char* rpath, size_t rplen);
+
+int
+peer_set_cwd(struct peer* p, const char* path);
 
 #endif
