@@ -107,7 +107,6 @@ server_acceptloop()
     struct sockaddr_storage sa_peer;
     socklen_t addrsize = sizeof(sa_peer);
 
-    handler_init();
     __sync_fetch_and_or(&this.isrunning, 1);
     while(1)
     {
@@ -131,14 +130,14 @@ server_acceptloop()
         }
     }
 
-    handler_destroy();
-
     return NULL;
 }
 
 void
 server_run()
 {
+    handler_init();
+
     pthread_create(&this.accept_tid, NULL,
             server_acceptloop, &this.listensocket);
 
@@ -159,4 +158,6 @@ server_join()
 {
     pthread_join(this.accept_tid, NULL);
     terminal_join();
+
+    handler_destroy();
 }

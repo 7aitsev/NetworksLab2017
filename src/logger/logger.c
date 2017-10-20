@@ -12,6 +12,7 @@
 
 struct logdata
 {
+    int ld_isrunning;
     int ld_isready;
     char* ld_buffer;
     pthread_mutex_t ld_mx;
@@ -98,13 +99,13 @@ logger_loop(void* p_logdata)
 {
     struct logdata* ld = (struct logdata*) p_logdata;
 
-    while(1)
+    __sync_add_and_fetch(&ld->ld_isrunning, 1);
+    while(__sync_fetch_and_or(&ld->ld_isrunning, 0))
     {
         pthread_mutex_lock(&ld->ld_mx);
-        while(0 == ld->ld_isready)
+        while(0 == __sync_fetch_and_or(&ld->ld_isready, 0))
         {
             pthread_cond_wait(&ld->ld_cv, &ld->ld_mx);
-            pthread_testcancel();
         }
         fprintf(stdout, ld->ld_buffer);
         __sync_and_and_fetch(&ld->ld_isready, 0);
@@ -185,7 +186,8 @@ logger_destroy()
     logger_flush();
 
     pthread_mutex_lock(&p->l_ld->ld_mx);
-    pthread_cancel(p->l_tid);
+    __sync_add_and_fetch(&p->l_ld->ld_isready, 1);
+    __sync_sub_and_fetch(&p->l_ld->ld_isrunning, 1);
     pthread_cond_signal(&p->l_ld->ld_cv);
     pthread_mutex_unlock(&p->l_ld->ld_mx);
     pthread_join(p->l_tid, NULL);

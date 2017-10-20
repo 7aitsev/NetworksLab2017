@@ -39,7 +39,7 @@ terminal_action_kill(peer_t peer)
     logger_log("[terminal] kill %hd\n", peer);
     handler_delete_first_if(
             lambda(int, (struct peer* p)
-                {return p->p_id == peer;}
+                {return p->p_id != 0 && p->p_id == peer;}
             ));
 }
 
@@ -51,7 +51,7 @@ terminal_loop()
     char inpline[cmdsize];
 
     logger_log("[terminal] started\n");
-    printf("\n> ");
+    printf("> ");
     while(1)
     {
         fgets(inpline, cmdsize, stdin);
@@ -68,7 +68,7 @@ terminal_loop()
         {
             terminal_action_kill(peer);
         }
-        printf("\n> ");
+        printf("> ");
     }
 
     return NULL;

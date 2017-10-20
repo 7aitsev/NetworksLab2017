@@ -42,7 +42,8 @@ void
 peer_destroy(struct peer* p)
 {
     peer_closesocket(p->p_sfd);
-    close(p->p_cwd);
+    if(STDIN_FILENO != p->p_cwd)
+        close(p->p_cwd);
     free(p->p_username);
     free(p->p_buffer);
     memset(p, 0, sizeof(struct peer));
@@ -138,9 +139,7 @@ peer_set_cwd(struct peer* p, const char* path)
             return -1;
         }
 
-        errno = 0;
-        int rv = dup2(dirfd, p->p_cwd); // assume this doesn't fail
-        logger_log("[peer] dup2: %s", strerror(errno));
+        dup2(dirfd, p->p_cwd); // assume this doesn't fail
         close(dirfd);
     }
     return 0;
