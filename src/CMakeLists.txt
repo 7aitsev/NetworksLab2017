@@ -1,7 +1,7 @@
-cmake_minimum_required(VERSION 2.8)
+cmake_minimum_required(VERSION 2.8.12)
 project(tcp_service)
 
-set(CMAKE_C_FLAGS "-Wall -Wextra -pthread -D_GNU_SOURCE")
+set(CMAKE_C_FLAGS "-pthread -D_GNU_SOURCE")
 
 set(DEPS_H ./lib/efunc.h ./lib/termproto.h)
 set(DEPS_S ./lib/efunc.c ./lib/termproto.c)
@@ -20,6 +20,12 @@ include_directories(.)
 list(APPEND SOURCES ${DEPS_S})
 list(APPEND HEADERS ${DEPS_H})
 
-add_executable(server main.c ${SOURCES} ${HEADERS})
+set(SERVER_TARGET server)
+add_executable(${SERVER_TARGET} main.c ${SOURCES} ${HEADERS})
+target_link_libraries(${SERVER_TARGET} pthread)
+target_compile_options(${SERVER_TARGET} PUBLIC -O3)
 
-target_link_libraries(server pthread)
+set(SERVER_DEBUG_TARGET server_debug)
+add_executable(${SERVER_DEBUG_TARGET} EXCLUDE_FROM_ALL main.c ${SOURCES} ${HEADERS})
+target_link_libraries(${SERVER_DEBUG_TARGET} pthread -fsanitize=thread)
+target_compile_options(${SERVER_DEBUG_TARGET} PUBLIC -Wall -Wextra -fsanitize=thread -fPIE -pie -O0 -g)
