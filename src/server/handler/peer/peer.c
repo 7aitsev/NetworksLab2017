@@ -12,40 +12,63 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+/**
+ * This function uses printf(), because it has to print details
+ * to stdout on a request from the <terminal> module.
+ */
 void
 peer_printinfo(struct peer* p)
 {
-    struct sockaddr_storage addr;
-    socklen_t len = sizeof addr;
+    int port = p->p_port;
+    unsigned int ip = p->p_ip;
+    char mode = peer_get_mode(p);
+    char ipstr[INET_ADDRSTRLEN];
 
-    getpeername(p->p_sfd, (struct sockaddr*) &addr, &len);
-
-    if(AF_INET == addr.ss_family)
+    if(0 == port)
     {
-        int port;
-        char mode = peer_get_mode(p);
-        char ipstr[INET_ADDRSTRLEN];
+        int rv;
+        struct sockaddr_storage addr;
+        socklen_t len = sizeof addr;
 
-        struct sockaddr_in *s = (struct sockaddr_in*) &addr;
-        port = ntohs(s->sin_port);
-        inet_ntop(AF_INET, &s->sin_addr, ipstr, sizeof ipstr);
-
-        printf("Peer #%d\n\tIP address: %s\n\tPort: %d\n\t"
-                "Socket: %d\n",
-                p->p_id, ipstr, port, p->p_sfd);
-        if(PEER_NO_PERMS != mode)
+        logger_log("[peer] no cache for Peer#%hd\n", p->p_id);
+        rv = getpeername(p->p_sfd, (struct sockaddr*) &addr, &len);
+        if(-1 == rv)
         {
-            printf("\tUsername: %s\n\tMode: %d\n",
-                    p->p_username, mode);
+            logger_log("[peer] getpeername failed for Peer#%hd\n",
+                    p->p_id);
+            return;
+        }
+
+        if(AF_INET == addr.ss_family)
+        {
+            struct sockaddr_in *s = (struct sockaddr_in*) &addr;
+            port = ntohs(s->sin_port); 
+            ip = (unsigned int) s->sin_addr.s_addr;
+
+            p->p_port = port;
+            p->p_ip = ip;
         }
         else
         {
-            printf("\tNot authorised\n");
+            printf("Peer#%d has unsupported adress family\n",
+                    p->p_id);
+            return;
         }
+    }
+    inet_ntop(AF_INET, &ip, ipstr, sizeof ipstr);
+
+    printf("Peer #%d\n\tIP address: %s\n\tPort: %d\n\t"
+            "Socket: %d\n",
+            p->p_id, ipstr, port, p->p_sfd);
+    if(PEER_NO_PERMS != mode)
+    {
+        char buf[256]; // :(
+        printf("\tUsername: %s\n\tCWD: %s\n\tMode: %d\n",
+                p->p_username, peer_get_cwd(p, buf, 256), mode);
     }
     else
     {
-        printf("Peer#%d has unsupported adress family\n", p->p_id);
+        printf("\tNot authorised\n");
     }
 }
 
@@ -91,7 +114,7 @@ peer_set_mode(struct peer* p, char mode)
     __sync_add_and_fetch(&p->p_mode, mode);
 }
 
-static inline int
+int
 peer_get_fdcwd(struct peer* p)
 {
     return __sync_fetch_and_or(&p->p_cwd, 0);
@@ -113,18 +136,13 @@ peer_get_cwd(struct peer* p, char* rpath, size_t rplen)
     return NULL;
 }
 
-/**
- * Invokes only from the <service> module which is the only one
- * who can modify cwd. So it is safe to read p->p_cwd from the module,
- * but not to modify, because other threads may be reading at the same
- * moment. Other threads have to use thread-safety methods to read p_cwd.
- */
 int
 peer_set_cwd(struct peer* p, const char* path)
 {
     int dirfd;
+    int cwd = peer_get_fdcwd(p);
 
-    if(STDIN_FILENO == p->p_cwd)
+    if(STDIN_FILENO == cwd)
     {
         dirfd = open(path, O_RDONLY);
         if(-1 == dirfd)
@@ -137,7 +155,7 @@ peer_set_cwd(struct peer* p, const char* path)
     {
         struct stat path_stat;
 
-        dirfd = openat(p->p_cwd, path, O_RDONLY);
+        dirfd = openat(cwd, path, O_RDONLY);
         if(-1 == dirfd)
         {
             return -1;
@@ -150,7 +168,7 @@ peer_set_cwd(struct peer* p, const char* path)
             return -1;
         }
 
-        dup2(dirfd, p->p_cwd); // assume this doesn't fail
+        dup2(dirfd, cwd); // assume this doesn't fail
         close(dirfd);
     }
     return 0;

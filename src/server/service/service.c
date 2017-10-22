@@ -202,8 +202,9 @@ do_ls(struct peer* p, struct term_req* req)
 {
     struct dirent* entry;
     DIR* root;
+    int fdcwd = peer_get_fdcwd(p);
 
-    int cnt = count_names_len(p->p_cwd, req);
+    int cnt = count_names_len(fdcwd, req);
     if(-1 == cnt)
     {
         error_term(p->p_sfd, req);
@@ -217,13 +218,13 @@ do_ls(struct peer* p, struct term_req* req)
     size_t bs = p->p_buflen;
 
     n = term_put_header(buf, bs, req->status, cnt);
-    root = fdopendir(openat(p->p_cwd, req->path, O_RDONLY)); // so-so
+    root = fdopendir(openat(fdcwd, req->path, O_RDONLY)); // so-so
     while(NULL != (entry = readdir(root)))
     {
         if(entry->d_name[0] != '.')
         {
             prev = n;
-            n += sprintf(buf + n, "%s%s\r\n", entry->d_name,
+            n += snprintf(buf + n, bs, "%s%s\r\n", entry->d_name,
                     (DT_DIR == entry->d_type) ? "/" : "");
             if(n >= bs)
             {
@@ -296,7 +297,6 @@ static int
 kill_by_username(peer_t this, struct term_req* req)
 {
     peer_t id;
-    printf("kill by uname\n");
     int rv = handler_find_first_and_apply(lambda(int, (struct peer* predic)
     {
         if(NULL != predic->p_username)
@@ -321,22 +321,21 @@ kill_by_username(peer_t this, struct term_req* req)
 static void
 do_kill(struct peer* p, struct term_req* req)
 {
+    int rv;
     peer_t this = p->p_id;
     peer_t other;
  
-    if(1 == sscanf(req->path, "%hd", &other))
+    req->status = BAD_REQUEST;
+    rv = sscanf(req->path, "%hd", &other);
+    if(1 == rv)
     {
-        printf("sscanf = 1\n");
+        logger_log("[service] kill@sscanf = 1\n");
         kill_by_id(this, other, req);
     }
     else if(-1 == kill_by_username(this, req))
     {
-        printf("sscanf != 1 and kill_by_uname failed\n");
+        logger_log("[service] kill@sscanf!=1, kill_by_uname failed\n");
         req->status = NOT_FOUND;
-    }
-    else
-    {
-        req->status = BAD_REQUEST;
     }
     small_resp(p, req);
 }
@@ -344,7 +343,56 @@ do_kill(struct peer* p, struct term_req* req)
 static void
 do_who(struct peer* p, struct term_req* req)
 {
-    logger_log("[service] who not implemented");
+    size_t n;
+    size_t tocpy;
+    size_t tosend;
+    size_t offset;
+    int peers_cnt = 0;
+    int bsize = 6 * TERMPROTO_BUF_SIZE; // big enough for 20 peers
+    char* buf = malloc(bsize);
+    int pathlen = TERMPROTO_PATH_SIZE;
+    char pathbuf[pathlen];
+
+    if(NULL == buf)
+    {
+        logger_log("[service] who: malloc failed\n");
+        return;
+    }
+
+    offset = sprintf(buf, "ID\tUNAME\tMODE\tCWD\n");
+    handler_foreach(lambda(void, (struct peer* pp)
+    {
+        char mode = peer_get_mode(pp);
+        if(0 != mode)
+        {
+            ++peers_cnt;
+            offset += sprintf(buf + offset, "%d\t%s\t%d\t%s\n",
+                    pp->p_id, pp->p_username, mode,
+                    peer_get_cwd(pp, pathbuf, pathlen));
+        }
+    }));
+    offset += sprintf(buf + offset, "TOTAL: %d\n", peers_cnt);
+
+    req->status = OK;
+    n = term_put_header(p->p_buffer, p->p_buflen, req->status, offset);
+    if(n + offset <= p->p_buflen)
+    {
+        tocpy = offset;
+        strncpy(p->p_buffer, buf, tocpy);
+        tosend = tocpy + n;
+        sendall(p->p_sfd, p->p_buffer, &tosend);
+    }
+    else
+    {
+        tocpy = p->p_buflen - n;
+        strncpy(p->p_buffer, buf, tocpy);
+        tosend = p->p_buflen;
+        sendall(p->p_sfd, p->p_buffer, &tosend);
+        tocpy = offset - p->p_buflen;
+        sendall(p->p_sfd, buf + p->p_buflen, &tocpy);
+    }
+    
+    free(buf);
 }
 
 static void

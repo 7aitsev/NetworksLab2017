@@ -18,6 +18,8 @@ struct peer
     size_t p_buflen;
 
     /* could be modified from multiple threads */
+    int p_port;
+    unsigned int p_ip; // struct in_addr
     char* p_username;
     char p_mode;
     int p_cwd;
@@ -46,6 +48,9 @@ peer_get_mode(struct peer* p);
 
 void
 peer_set_mode(struct peer* p, char mode);
+
+int
+peer_get_fdcwd(struct peer* p);
 
 char*
 peer_get_cwd(struct peer* p, char* rpath, size_t rplen);
