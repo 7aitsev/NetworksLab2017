@@ -107,7 +107,8 @@ logger_loop(void* p_logdata)
         {
             pthread_cond_wait(&ld->ld_cv, &ld->ld_mx);
         }
-        fprintf(stdout, ld->ld_buffer);
+        if(__sync_fetch_and_or(&ld->ld_isrunning, 0))
+            fprintf(stdout, ld->ld_buffer);
         __sync_and_and_fetch(&ld->ld_isready, 0);
         pthread_mutex_unlock(&ld->ld_mx);
     }
