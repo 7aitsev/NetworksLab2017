@@ -48,6 +48,31 @@ small_resp(struct peer* p, struct term_req* req)
     sendall(p->p_sfd, p->p_buffer, &respsize);
 }
 
+static char*
+get_username(struct peer* p, char* login)
+{
+    handler_perform(p, lambda(void, (struct peer* pp)
+    {
+        login = pp->p_username;
+    }));
+    return login;
+}
+
+static int
+check_username(const char* inp, const char* login)
+{
+    return (NULL != strstr(inp, login)) ? 1 : 0;
+}
+
+static int
+isitpeer(struct peer* p, char* inp)
+{
+    char* login = NULL;
+
+    login = get_username(p, login);
+    return check_username(inp, login);
+}
+
 static int
 find_in_db(FILE* fdb, const char* login, const char* pass)
 {
@@ -73,7 +98,7 @@ do_auth(struct peer* p, struct term_req* req)
         char pass[11];
         int rv;
 
-        rv = sscanf(req->path, "%10[^;];%10s", login, pass);
+        rv = sscanf(req->path, "%10[a-zA-Z];%10s", login, pass);
         if(2 == rv)
         {
             FILE* db = fopen(DB_ACCOUNTS, "r");
@@ -248,29 +273,66 @@ do_cd(struct peer* p, struct term_req* req)
 }
 
 static void
+kill_by_id(peer_t this, peer_t other, struct term_req* req)
+{
+    if(this != other)
+    {
+        int rv;
+        logger_log("[service] kill %hd\n", other);
+        rv = handler_delete_first_if(
+                lambda(int, (struct peer* pp)
+                    {return pp->p_id == other && pp->p_id != 0;}
+                ));
+        req->status = (rv == 1) ? OK : NOT_FOUND;
+    }
+    else
+    {
+        req->status = FORBIDDEN;
+        req->msg = KILL_SUICIDE;
+    }
+}
+
+static int
+kill_by_username(peer_t this, struct term_req* req)
+{
+    peer_t id;
+    printf("kill by uname\n");
+    int rv = handler_find_first_and_apply(lambda(int, (struct peer* predic)
+    {
+        if(NULL != predic->p_username)
+            return NULL != strstr(req->path, predic->p_username);
+        else
+            return 0;
+    }), lambda(void, (struct peer* pp)
+    {
+        id = pp->p_id;
+    }));
+    if(rv)
+    {
+        kill_by_id(this, id, req);
+        return 0;
+    }
+    else
+    {
+        return -1;
+    }
+}
+
+static void
 do_kill(struct peer* p, struct term_req* req)
 {
-    int rv;
     peer_t this = p->p_id;
     peer_t other;
-
-    rv = sscanf(req->path, "%hd", &other);
-    if(rv == 1)
+ 
+    if(1 == sscanf(req->path, "%hd", &other))
     {
-        if(this != other)
-        {
-            logger_log("[service] kill %hd\n", other);
-            rv = handler_delete_first_if(
-                    lambda(int, (struct peer* pp)
-                        {return pp->p_id == other && pp->p_id != 0;}
-                    ));
-            req->status = (rv == 1) ? OK : NOT_FOUND;
-        }
-        else
-        {
-            req->status = FORBIDDEN;
-            req->msg = KILL_SUICIDE;
-        }
+        printf("sscanf = 1\n");
+        kill_by_id(this, other, req);
+    }
+    else if(-1 == kill_by_username(this, req))
+    {
+        printf("sscanf != 1 and kill_by_uname failed\n");
+        req->status = NOT_FOUND;
     }
     else
     {
@@ -286,6 +348,21 @@ do_who(struct peer* p, struct term_req* req)
 }
 
 static void
+do_logout(struct peer* p, struct term_req* req)
+{
+    if(isitpeer(p, req->path))
+    {
+        logger_log("[service] logout: username=%s\n", req->path);
+        req->status = OK;
+    }
+    else
+    {
+        req->status = BAD_REQUEST;
+    }
+    small_resp(p, req);
+}
+
+static int
 handle_req(struct peer* p)
 {
     int rv;
@@ -317,6 +394,11 @@ handle_req(struct peer* p)
                 case WHO:
                     do_who(p, &req);
                     break;
+                case LOGOUT:
+                    do_logout(p, &req);
+                    if(OK == req.status)
+                        return 1;
+                    break;
                 default:
                     logger_log("[handler] not implemented\n");
             }
@@ -335,6 +417,7 @@ handle_req(struct peer* p)
     {
         error_term(p->p_sfd, &req);
     }
+    return 0;
 }
 
 void
@@ -355,7 +438,9 @@ service(struct peer* p)
             int rv = readcrlf(sfd, buffer, len);
             if(0 < rv)
             {
-                handle_req(p);
+                rv = handle_req(p);
+                if(1 == rv)
+                    return;
             }
             else if(0 == rv)
             {
