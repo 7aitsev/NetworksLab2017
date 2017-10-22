@@ -213,22 +213,26 @@ handler_new(int sfd)
     pthread_mutex_unlock(&g_lock);
 }
 
-void
+int
 handler_delete_first_if(int (*predicate)(struct peer* ppeer))
 {
+    int rv;
     pthread_mutex_lock(&g_lock);
     logger_log("[handler] delete first\n");
-    find_first_and_apply(predicate, &deletepeer);
+    rv = find_first_and_apply(predicate, &deletepeer);
     pthread_mutex_unlock(&g_lock);
+    return rv;
 }
 
-void
+int
 handler_delete_all_if(int (*predicate)(struct peer* ppeer))
 {
+    int rv;
     pthread_mutex_lock(&g_lock);
     logger_log("[handler] delete all\n");
-    find_all_and_apply(predicate, &deletepeer);
+    rv = find_all_and_apply(predicate, &deletepeer);
     pthread_mutex_unlock(&g_lock);
+    return rv;
 }
 
 void
@@ -263,12 +267,10 @@ handler_fina_all_and_apply(int (*predicate)(struct peer* ppeer),
     return rv;
 }
 
-int
+void
 handler_perform(struct peer* subj, void (*consumer)(struct peer* p))
 {
-    int rv;
     pthread_mutex_lock(&g_lock);
     consumer(subj);
     pthread_mutex_unlock(&g_lock);
-    return rv;
 }

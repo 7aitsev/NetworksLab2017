@@ -24,10 +24,10 @@ handler_getcurrent();
 peer_t
 handler_gettotal();
 
-void
+int
 handler_delete_first_if(int (*predicate)(struct peer* ppeer));
 
-void
+int
 handler_delete_all_if(int (*predicate)(struct peer* ppeer));
 
 void
@@ -41,7 +41,7 @@ int
 handler_fina_all_and_apply(int (*predicate)(struct peer* ppeer),
         void (*consumer)(struct peer* ppeer));
 
-int
+void
 handler_perform(struct peer* subj, void (*consumer)(struct peer* p));
 
 #endif

@@ -39,7 +39,7 @@ terminal_action_kill(peer_t peer)
     logger_log("[terminal] kill %hd\n", peer);
     handler_delete_first_if(
             lambda(int, (struct peer* p)
-                {return p->p_id != 0 && p->p_id == peer;}
+                {return p->p_id == peer && p->p_id != 0;}
             ));
 }
 

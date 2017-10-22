@@ -21,6 +21,9 @@ static const char * const MSG_EMPTY = "";
 static const char * const AUTH_MULTIPLE = "You\'ve been authorised";
 static const char * const AUTH_BAD_TRY = "Unable to log in";
 static const char * const AUTH_GRANTED = "Successful authentication";
+static const char * const KILL_SUICIDE = "You've been visited by " \
+                                         "suiced police. No ticket today, " \
+                                         "but you better be careful";
 
 static void
 error_term(int sfd, struct term_req* req)
@@ -245,6 +248,44 @@ do_cd(struct peer* p, struct term_req* req)
 }
 
 static void
+do_kill(struct peer* p, struct term_req* req)
+{
+    int rv;
+    peer_t this = p->p_id;
+    peer_t other;
+
+    rv = sscanf(req->path, "%hd", &other);
+    if(rv == 1)
+    {
+        if(this != other)
+        {
+            logger_log("[service] kill %hd\n", other);
+            rv = handler_delete_first_if(
+                    lambda(int, (struct peer* pp)
+                        {return pp->p_id == other && pp->p_id != 0;}
+                    ));
+            req->status = (rv == 1) ? OK : NOT_FOUND;
+        }
+        else
+        {
+            req->status = FORBIDDEN;
+            req->msg = KILL_SUICIDE;
+        }
+    }
+    else
+    {
+        req->status = BAD_REQUEST;
+    }
+    small_resp(p, req);
+}
+
+static void
+do_who(struct peer* p, struct term_req* req)
+{
+    logger_log("[service] who not implemented");
+}
+
+static void
 handle_req(struct peer* p)
 {
     int rv;
@@ -254,16 +295,13 @@ handle_req(struct peer* p)
     if(0 == rv)
     {
         req.msg = MSG_EMPTY;
+        int methiskill = (req.method == KILL);
 
-        /*if(PERMS_SUPER == p->p_mode)
+        if(PEER_SUPER == peer_get_mode(p) && methiskill)
         {
-            switch(req.method)
-            {
-                case KILL:
-                    do_kill(p, &req);
-            }
-        } else */
-        if(PEER_NO_PERMS < peer_get_mode(p))
+            do_kill(p, &req);
+        }
+        else if(PEER_NO_PERMS < peer_get_mode(p) && !methiskill)
         {
             switch(req.method)
             {
@@ -275,6 +313,9 @@ handle_req(struct peer* p)
                     break;
                 case LS:
                     do_ls(p, &req);
+                    break;
+                case WHO:
+                    do_who(p, &req);
                     break;
                 default:
                     logger_log("[handler] not implemented\n");
