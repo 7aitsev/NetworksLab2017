@@ -17,13 +17,15 @@ peer_printinfo(struct peer* p)
 {
     struct sockaddr_storage addr;
     socklen_t len = sizeof addr;
-    int port;
-    char ipstr[INET_ADDRSTRLEN];
 
     getpeername(p->p_sfd, (struct sockaddr*) &addr, &len);
 
     if(AF_INET == addr.ss_family)
     {
+        int port;
+        char mode = peer_get_mode(p);
+        char ipstr[INET_ADDRSTRLEN];
+
         struct sockaddr_in *s = (struct sockaddr_in*) &addr;
         port = ntohs(s->sin_port);
         inet_ntop(AF_INET, &s->sin_addr, ipstr, sizeof ipstr);
@@ -31,6 +33,15 @@ peer_printinfo(struct peer* p)
         printf("Peer #%d\n\tIP address: %s\n\tPort: %d\n\t"
                 "Socket: %d\n",
                 p->p_id, ipstr, port, p->p_sfd);
+        if(PEER_NO_PERMS != mode)
+        {
+            printf("\tUsername: %s\n\tMode: %d\n",
+                    p->p_username, mode);
+        }
+        else
+        {
+            printf("\tNot authorised\n");
+        }
     }
     else
     {
