@@ -21,9 +21,9 @@ static const char * const MSG_EMPTY = "";
 static const char * const AUTH_MULTIPLE = "You\'ve been authorised";
 static const char * const AUTH_BAD_TRY = "Unable to log in";
 static const char * const AUTH_GRANTED = "Successful authentication";
-static const char * const KILL_SUICIDE = "You've been visited by " \
-                                         "suiced police. No ticket today, " \
-                                         "but you better be careful";
+static const char * const KILL_SUICIDE = "You've been visited by suici" \
+                                         "de police.\r\nNo ticket toda" \
+                                         "y, but you better be careful";
 
 static void
 error_term(int sfd, struct term_req* req)
@@ -43,8 +43,8 @@ small_resp(struct peer* p, struct term_req* req)
     size_t respsize;
     respsize = term_put_header(p->p_buffer, p->p_buflen, req->status,
             strlen(req->msg));
-    if(NULL != req->msg)
-        respsize += sprintf(p->p_buffer + respsize, "%s", req->msg);
+    if(MSG_EMPTY != req->msg)
+        respsize += sprintf(p->p_buffer + respsize, "%s\r\n", req->msg);
     sendall(p->p_sfd, p->p_buffer, &respsize);
 }
 
@@ -246,10 +246,12 @@ do_cd(struct peer* p, struct term_req* req)
     int rv = peer_set_cwd(p, req->path);
     if(0 == rv)
     {
+        char buf[TERMPROTO_BUF_SIZE];
+        peer_get_cwd(p, buf, TERMPROTO_PATH_SIZE);
         req->status = OK;
+        req->msg = buf;
         small_resp(p, req);
-        char buf[256];
-        logger_log("[service] chdir=%s\n", peer_get_cwd(p, buf, 256));
+        logger_log("[service] chdir=%s\n", buf);
     }
     else
     {
