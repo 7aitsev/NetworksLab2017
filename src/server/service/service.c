@@ -224,7 +224,7 @@ do_ls(struct peer* p, struct term_req* req)
         if(entry->d_name[0] != '.')
         {
             prev = n;
-            n += snprintf(buf + n, bs, "%s%s\r\n", entry->d_name,
+            n += snprintf(buf + n, bs - n, "%s%s\r\n", entry->d_name,
                     (DT_DIR == entry->d_type) ? "/" : "");
             if(n >= bs)
             {

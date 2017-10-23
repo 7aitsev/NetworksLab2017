@@ -11,17 +11,13 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 
-#define HANDLER_PEERS_LIMIT 20
-#define HANDLER_PEERS_SIZE 5
+#define HANDLER_PEERS_SIZE 20
 
 static peer_t g_current;
 static peer_t g_total;
 
 static peer_t g_peerslen;
 static struct peer* g_peers;
-#define DOUBLE_LENGTH ((g_peerslen << 1) >= HANDLER_PEERS_LIMIT \
-                                          ? HANDLER_PEERS_LIMIT \
-                                          : g_peerslen << 1)
 
 static pthread_mutex_t g_lock;
 
@@ -31,7 +27,7 @@ handler_init()
     logger_log("[handler] initializing...\n");
     g_peerslen = HANDLER_PEERS_SIZE;
     g_peers = malloc(g_peerslen * sizeof(struct peer));
-    memset(g_peers, 0, sizeof(g_peerslen * sizeof(struct peer)));
+    memset(g_peers, 0, g_peerslen * sizeof(struct peer));
     pthread_mutex_init(&g_lock, NULL);
 }
 
@@ -132,54 +128,11 @@ deletepeer(struct peer* ppeer)
     peer_destroy(ppeer);
 }
 
-static int
-handler_realloc(peer_t newlen)
-{
-    logger_log("[realloc] newlen=%d\n", newlen);
-    struct peer* newpeers;
-    int actualsize = newlen * sizeof(struct peer);
-    if(NULL != (newpeers = realloc(g_peers, actualsize)))
-    {
-        g_peers = newpeers;
-        if(newlen > g_peerslen)
-            memset(g_peers + g_peerslen, 0,
-                    sizeof(struct peer) * (newlen - g_peerslen));
-        g_peerslen = newlen;
-        return 0;
-    }
-    else
-    {
-        logger_log("[handler] realloc failed: %s\n", strerror(errno));
-        return -1;
-    }
-}
-
-static void
-handler_shrink()
-{
-    peer_t curr = handler_getcurrent();
-    if(g_peerslen > HANDLER_PEERS_SIZE && curr <= g_peerslen / 4)
-    {
-        size_t cnt = 0;
-        for(int i = g_peerslen - 1; cnt != g_peerslen / 2; --i)
-        {
-            if(peer_isnotexist(g_peers + i))
-                ++cnt;
-        }
-        if(g_peerslen / 2 == cnt)
-        {
-            logger_log("[handler] shrink from %d to %d\n", g_peerslen, cnt);
-            handler_realloc(cnt);
-        }
-    }
-}
-
 void
 handler_new(int sfd)
 {
     pthread_mutex_lock(&g_lock);
     logger_log("[handler] new peer sfd=%d\n", sfd);
-    handler_shrink();
     while(1)
     {
         int isfound = find_first_and_apply(
@@ -196,15 +149,8 @@ handler_new(int sfd)
         {
             break;
         }
-        else
+        else if(g_peerslen < HANDLER_PEERS_SIZE)
         {
-            if(g_peerslen < HANDLER_PEERS_LIMIT)
-            {
-                logger_log("[handler] realloc from %d to %d\n",
-                        g_peerslen, 2 * g_peerslen);
-                if(0 == handler_realloc(DOUBLE_LENGTH))
-                    continue;
-            }
             logger_log("[handler] Reached the peers limit\n");
             peer_closesocket(sfd);
             break;
