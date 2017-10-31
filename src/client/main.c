@@ -131,6 +131,16 @@ cmd_toupper(char * cmd)
 }
 
 int
+isempty(const char *s) {
+  while('\0' != *s) {
+    if(! isspace((unsigned char) *s))
+      return 0;
+    s++;
+  }
+  return 1;
+}
+
+int
 getuname(const char* prompt, char* uname)
 {
     char c, rv;
@@ -239,6 +249,7 @@ wait_resp(SOCKET sfd, struct term_req* req)
     if(-1 == rv)
     {
         error("sendall() failed", &sfd, exit);
+        req->status = INTERNAL_ERROR;
     }
 
     rv = recv(sfd, g_buf, g_bufsize, 0);
@@ -251,6 +262,7 @@ wait_resp(SOCKET sfd, struct term_req* req)
     else if(-1 == rv)
     {
         error("recv failed", NULL, NULL);
+        req->status = INTERNAL_ERROR;
         return -1;
     }
 
@@ -302,7 +314,8 @@ handle_cmd(SOCKET sfd, struct term_req* req)
             }
             while(-1 != (rv = wait_resp(sfd, req))
                 && OK != req->status);
-            printf("You are logged in\n");
+            if(OK == req->status)
+                printf("You are logged in\n");
             return;
         case LS:
             if(-1 != wait_resp(sfd, req) && req->status != OK)
@@ -355,18 +368,19 @@ parse_cmd(struct term_req* req, const char* buf)
     rv = sscanf(buf, "%7s %255s\r\n", method, req->path);
     if(0 < rv)
     {
-        if(-1 != (rv = term_is_valid_method(cmd_toupper(method))))
+        int cmd;
+        if(-1 != (cmd = term_is_valid_method(cmd_toupper(method))))
         {
-            req->method = rv;
+            req->method = cmd;
             if(2 != rv)
             {
-                strcpy(req->path, ".");
+                strcpy(req->path, " .");
             }
             return 0;
         }
         else
         {
-            fprintf(stderr, "Unknown command: %s", method);
+            fprintf(stderr, "Unknown command: %s\n", method);
             return -1;
         }
     }
@@ -386,17 +400,22 @@ int
 read_cmd(char* buf, int bufsize)
 {
     int buflen;
-    while(1)
+    *buf = '\0';
+    if(NULL == fgets(buf, bufsize, stdin))
     {
-        if(NULL != fgets(buf, bufsize, stdin))
-            break;
-        fprintf(stderr, "Bad or empty command\n");
+        perror("fgets() failed while reading stdin");
+        return -1;
+    }
+    if(isempty(buf))
+    {
+        return 0;
     }
     buflen = strnlen(buf, bufsize);
     if(buflen == bufsize)
     {
         buf[--buflen] = '\0';
     }
+    buf[buflen] = '\0';
     return buflen;
 }
 
@@ -427,46 +446,37 @@ recv_resp(SOCKET sfd, char* buf, size_t bufsize)
     }
 }
 
-int
-mk_req(SOCKET sfd, const char* buf, size_t len)
-{
-    size_t tosend = len;
-    sendall(sfd, buf, &tosend);
-    
-    //struct term_req->method, term_req->path
-    //n = term_mk_req(req)
-    //tosend = 10 + 1 + TERMPROTO_PATH_SIZE + 2
-    //sendall(sfd, buf, &tosend);
-    return 0;
-}
-
 void
 runclient(SOCKET sfd)
 {
     size_t cmdlen;
-    const int cmdbufsize = 300;
-    char cmdbuf[cmdbufsize];
+    enum {CMDBUFSIZE = 300};
+    char cmdbuf[CMDBUFSIZE];
     struct term_req req;
+
     g_running = 1;
     setvbuf(stdout, NULL, _IONBF, 0);
 
-    req.method = term_is_valid_method("AUTH");
-    handle_cmd(sfd, &req);
-    if(0 == g_running)
-        return;
-    req.method = term_is_valid_method("CD");
-    strcpy(req.path, ".");
-    handle_cmd(sfd, &req);
-    if(0 == g_running)
-        return;
+    {
+        req.method = term_is_valid_method("AUTH");
+        handle_cmd(sfd, &req);
+        if(0 == g_running)
+            return;
+        req.method = term_is_valid_method("CD");
+        strcpy(req.path, ".");
+        handle_cmd(sfd, &req);
+        if(0 == g_running)
+            return;
+    }
 
     while(g_running)
     {
         print_prompt();
-        cmdlen = read_cmd(cmdbuf, cmdbufsize);
+        cmdlen = read_cmd(cmdbuf, CMDBUFSIZE);
         if(0 == cmdlen)
             continue;
-        parse_cmd(&req, cmdbuf);
+        if(-1 == parse_cmd(&req, cmdbuf))
+            continue;
         if(AUTH == req.method)
         {
             printf("You are already logged in\n");
