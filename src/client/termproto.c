@@ -156,9 +156,11 @@ getpostion(char* buf, size_t len)
     if(len == TERMPROTO_BUF_SIZE)
         len--;
     buf[len] = '\0';
+    //printf("gp buf=%s, len=%d\n", buf, len);
 
-    while(NULL != (pos = strtok(buf, "\n")))
+    while(NULL != (pos = strtok(buf, "\r\n")))
     {
+        //printf("pos=%s\n", pos);
         if(++cnt > 2 && '\r' != *pos)
         {
             cnt = strlen(pos);
@@ -166,6 +168,7 @@ getpostion(char* buf, size_t len)
                 pos[cnt - 1] = '\0';
             return pos;
         }
+        buf = NULL;
     }
     return pos;
 }
@@ -179,7 +182,7 @@ term_parse_resp(struct term_req* req, char* buf, size_t* len)
     char status_txt[22];
     status_txt[0] = '\0';
     
-    rv = sscanf(buf, "%3s %21sLENGTH: %d", status, status_txt, &dlen);
+    rv = sscanf(buf, "%3s %21s LENGTH: %d", status, status_txt, &dlen);
     if(2 <= rv)
     {
         int s = term_is_valid_status(status);
@@ -189,7 +192,7 @@ term_parse_resp(struct term_req* req, char* buf, size_t* len)
         strncpy(req->path, status_txt, 22);
         if(3 == rv && 0 != dlen)
         {
-            req->msg = getpostion(buf, rv);
+            req->msg = getpostion(buf, *len);
             *len = dlen;
         }
     }

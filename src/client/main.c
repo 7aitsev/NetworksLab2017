@@ -19,31 +19,40 @@ static char g_buf[TERMPROTO_BUF_SIZE];
 
 int prompt_len;
 char PROMPT[300];
+char g_username[11];
 
 void
 set_prompt(const char* cwd)
 {
     if(NULL != cwd)
-        prompt_len = snprintf(PROMPT, 300, "%s> ", cwd);
+        prompt_len = snprintf(PROMPT, 300, "%s:%s$ ",
+                g_username, cwd);
 }
 
 void
 print_prompt()
 {
-    write(STDIN_FILENO, PROMPT, prompt_len);
+    fputs(PROMPT, stdout);
 }
 
 void
-error(const char *errMsg, const SOCKET *socket, void (*exit)(int))
+error(const char *err_msg, const SOCKET *socket, void (*exit)(int))
 {
-    char *decErrCode = NULL;
-    if(0 == FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM,
-                          0, (DWORD) WSAGetLastError(), 0, (LPSTR) &decErrCode, 0, 0)
-            )
+    char *dec_err_code = NULL;
+    if(0 != WSAGetLastError())
     {
-        *decErrCode = '\0';
+        if(0 == FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM,
+                0, (DWORD) WSAGetLastError(), 0, (LPSTR) &dec_err_code, 0, 0))
+        {
+            *dec_err_code = '\0';
+        }
+        fprintf(stderr, "%s:\n%s\n", err_msg, dec_err_code);
     }
-    fprintf(stderr, ":\n%s %s\n", errMsg, decErrCode);
+    else
+    {
+        fprintf(stderr, "%s\n", err_msg);
+    }
+
     if(socket != NULL)
     {
         shutdown(*socket, SD_BOTH);
@@ -124,10 +133,13 @@ cmd_toupper(char * cmd)
 int
 getuname(const char* prompt, char* uname)
 {
-    char rv;
+    char c, rv;
 
     fputs(prompt, stdout);
     rv = scanf("%10s", uname);
+
+    while('\n' != (c = getchar()) && EOF != c);
+
     if(rv != 1)
     {
         return 0;
@@ -146,7 +158,7 @@ getpass(const char *prompt, char* password, unsigned char psize)
     unsigned char plen = 0;
     unsigned char plim = psize - 1;
 
-    printf("%s", prompt);
+    fputs(prompt, stdout);
 
     HANDLE hIn = GetStdHandle(STD_INPUT_HANDLE);
 
@@ -202,8 +214,10 @@ mk_auth_req(struct term_req* req)
     {
         fprintf(stderr, "Bad password. Try again\n");
     }
-    snprintf(req->path, TERMPROTO_PATH_SIZE, "%s;%s\n",
+
+    snprintf(req->path, TERMPROTO_PATH_SIZE, "%s;%s",
             uname, pass);
+    strncpy(g_username, uname, 11);
 }
 
 int
@@ -240,8 +254,11 @@ wait_resp(SOCKET sfd, struct term_req* req)
         return -1;
     }
 
+    //write(1, g_buf, rv);
+    dlen = rv;
     if(0 == (rv = term_parse_resp(req, g_buf, &dlen)))
     {
+        //printf("raw=%s\n, dlen=%d\nmsg=%s\n", g_buf, dlen, req->msg);
         return dlen;
     }
     return rv;
@@ -263,7 +280,7 @@ print_msg(struct term_req* req)
 {
     if(0 != strcmp(EMPTY_MSG, req->msg))
     {
-        printf("%s", req->msg);
+        printf("%s\n", req->msg);
     }
 }
 
@@ -283,12 +300,20 @@ handle_cmd(SOCKET sfd, struct term_req* req)
                 print_msg(req);
                 mk_auth_req(req);
             }
-            while(-1 != (rv = wait_resp(sfd, req)));
+            while(-1 != (rv = wait_resp(sfd, req))
+                && OK != req->status);
             printf("You are logged in\n");
             return;
-        // case LS:
-            // mk_ls_req(req);
-            // break;
+        case LS:
+            if(-1 != wait_resp(sfd, req) && req->status != OK)
+            {
+                print_msg(req);
+            }
+            else
+            {
+                print_bad_resp(req);
+            }
+            break;
         case CD:
             if(-1 != wait_resp(sfd, req))
             {
@@ -301,6 +326,18 @@ handle_cmd(SOCKET sfd, struct term_req* req)
                     print_bad_resp(req);
                 }
             }
+            break;
+        case LOGOUT:
+            strncpy(req->path, g_username, 11);
+            if(-1 != wait_resp(sfd, req))
+            {
+                g_running = 0;
+            }
+            else
+            {
+                print_bad_resp(req);
+            }
+            break;
         default:
             fprintf(stderr, "Command not implemented\n");
             break;
@@ -321,6 +358,10 @@ parse_cmd(struct term_req* req, const char* buf)
         if(-1 != (rv = term_is_valid_method(cmd_toupper(method))))
         {
             req->method = rv;
+            if(2 != rv)
+            {
+                strcpy(req->path, ".");
+            }
             return 0;
         }
         else
@@ -345,8 +386,12 @@ int
 read_cmd(char* buf, int bufsize)
 {
     int buflen;
-    while(NULL != fgets(buf, bufsize, stdin))
+    while(1)
+    {
+        if(NULL != fgets(buf, bufsize, stdin))
+            break;
         fprintf(stderr, "Bad or empty command\n");
+    }
     buflen = strnlen(buf, bufsize);
     if(buflen == bufsize)
     {
@@ -401,8 +446,9 @@ runclient(SOCKET sfd)
     size_t cmdlen;
     const int cmdbufsize = 300;
     char cmdbuf[cmdbufsize];
-
     struct term_req req;
+    g_running = 1;
+    setvbuf(stdout, NULL, _IONBF, 0);
 
     req.method = term_is_valid_method("AUTH");
     handle_cmd(sfd, &req);
@@ -414,9 +460,6 @@ runclient(SOCKET sfd)
     if(0 == g_running)
         return;
 
-return;
-
-    g_running = 1;
     while(g_running)
     {
         print_prompt();
@@ -427,6 +470,7 @@ return;
         if(AUTH == req.method)
         {
             printf("You are already logged in\n");
+            req.method = LS;
             continue;
         }
 
