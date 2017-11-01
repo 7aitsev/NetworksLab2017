@@ -12,7 +12,7 @@ int
 readcrlf(SOCKET sfd, char *buf, size_t bsize);
 
 int
-readn(SOCKET sfd, char *buf, size_t bsize);
+readn(SOCKET sfd, char *buf, size_t len);
 
 int
 sendall(SOCKET sfd, const char* buf, size_t* bsize);

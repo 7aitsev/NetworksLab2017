@@ -22,19 +22,19 @@ static const char * const TERM_STATUS_ALL[] = {
     "404", "Not Found",
     "405", "Not a Directory",
     "408", "Request Timeout",
-    "500", "Internal Server Error",
+    "500", "Internal Server Error"
 };
 
 char*
 term_get_method(int method)
 {
-    return TERM_METHOD_STRING[method];
+    return (char*) TERM_METHOD_STRING[method];
 }
 
 char*
 term_get_status_desc(int status)
 {
-    return TERM_STATUS_ALL[status + 1];
+    return (char*) TERM_STATUS_ALL[status + 1];
 }
 
 static int
@@ -147,42 +147,15 @@ term_mk_req_header(struct term_req* req, char* buf, size_t bufsize)
     return (n < bufsize) ? n : bufsize;
 }
 
-char*
-getpostion(char* buf, size_t len)
-{
-    int cnt = 0;
-    char* pos = NULL;
-    
-    if(len == TERMPROTO_BUF_SIZE)
-        len--;
-    buf[len] = '\0';
-    //printf("gp buf=%s, len=%d\n", buf, len);
-
-    while(NULL != (pos = strtok(buf, "\r\n")))
-    {
-        //printf("pos=%s\n", pos);
-        if(++cnt > 2 && '\r' != *pos)
-        {
-            cnt = strlen(pos);
-            if('\r' == pos[cnt - 1])
-                pos[cnt - 1] = '\0';
-            return pos;
-        }
-        buf = NULL;
-    }
-    return pos;
-}
-
 int
-term_parse_resp(struct term_req* req, char* buf, size_t* len)
+term_parse_resp_status(struct term_req* req, char* buf)
 {
     int rv;
-    size_t dlen = 0;
     char status[4];
     char status_txt[22];
     status_txt[0] = '\0';
     
-    rv = sscanf(buf, "%3s %21s LENGTH: %d", status, status_txt, &dlen);
+    rv = sscanf(buf, "%3s %21s", status, status_txt);
     if(2 <= rv)
     {
         int s = term_is_valid_status(status);
@@ -190,15 +163,20 @@ term_parse_resp(struct term_req* req, char* buf, size_t* len)
             return s;
         req->status = s;
         strncpy(req->path, status_txt, 22);
-        if(3 == rv && 0 != dlen)
-        {
-            req->msg = getpostion(buf, *len);
-            *len = dlen;
-        }
     }
     else
     {
         return -1;
     }
     return 0;
+}
+
+int
+term_parse_resp_body(char* buf)
+{
+    int rv;
+    int len;
+    
+    rv = sscanf(buf, "LENGTH: %d", &len);
+    return (1 == rv) ? len : -1;
 }

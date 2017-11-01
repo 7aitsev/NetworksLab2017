@@ -26,7 +26,7 @@ readcrlf(SOCKET sfd, char *buf, size_t bsize)
                 continue;
             return rc;
         }
-        if ('\n' == c)
+        if('\n' == c)
         {
             if('\r' == lastc)
                 buf--;
@@ -43,11 +43,10 @@ readcrlf(SOCKET sfd, char *buf, size_t bsize)
 }
 
 int
-readn(SOCKET sfd, char *buf, size_t bsize)
+readn(SOCKET sfd, char *buf, size_t len)
 {
     int cnt;
     int rc;
-    int len = bsize;
 
     cnt = len;
     while(0 < cnt)

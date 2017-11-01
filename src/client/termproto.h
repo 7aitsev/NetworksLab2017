@@ -11,6 +11,7 @@ enum TERM_METHOD {
 };
 
 enum TERM_STATUS {
+    UNDEFINED = -1,
     OK = 0,
     BAD_REQUEST = 2,
     FORBIDDEN = 4,
@@ -48,6 +49,9 @@ size_t
 term_mk_req_header(struct term_req* req, char* buf, size_t bufsize);
 
 int
-term_parse_resp(struct term_req* req, char* buf, size_t* len);
+term_parse_resp_status(struct term_req* req, char* buf);
+
+int
+term_parse_resp_body(char* buf);
 
 #endif
