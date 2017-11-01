@@ -203,7 +203,7 @@ handler_find_first_and_apply(int (*predicate)(struct peer* ppeer),
 
 
 int
-handler_fina_all_and_apply(int (*predicate)(struct peer* ppeer),
+handler_find_all_and_apply(int (*predicate)(struct peer* ppeer),
         void (*consumer)(struct peer* ppeer))
 {
     int rv;

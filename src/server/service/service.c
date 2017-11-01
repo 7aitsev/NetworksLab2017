@@ -21,9 +21,6 @@ static const char * const MSG_EMPTY = "";
 static const char * const AUTH_MULTIPLE = "You\'ve been authorised";
 static const char * const AUTH_BAD_TRY = "Unable to log in";
 static const char * const AUTH_GRANTED = "Successful authentication";
-static const char * const KILL_SUICIDE = "You've been visited by suici" \
-                                         "de police.\r\nNo ticket toda" \
-                                         "y, but you better be careful";
 
 static void
 error_term(int sfd, struct term_req* req)
@@ -41,8 +38,11 @@ static void
 small_resp(struct peer* p, struct term_req* req)
 {
     size_t respsize;
+    size_t bodylen = strlen(req->msg);
+
+    bodylen += (bodylen > 0) ? 2 : 0;
     respsize = term_put_header(p->p_buffer, p->p_buflen, req->status,
-            strlen(req->msg));
+            bodylen);
     if(MSG_EMPTY != req->msg)
         respsize += sprintf(p->p_buffer + respsize, "%s\r\n", req->msg);
     sendall(p->p_sfd, p->p_buffer, &respsize);
@@ -274,7 +274,7 @@ do_cd(struct peer* p, struct term_req* req)
         error_term(p->p_sfd, req);
     }
 }
-
+/*
 static void
 kill_by_id(peer_t this, peer_t other, struct term_req* req)
 {
@@ -291,7 +291,6 @@ kill_by_id(peer_t this, peer_t other, struct term_req* req)
     else
     {
         req->status = FORBIDDEN;
-        req->msg = KILL_SUICIDE;
     }
 }
 
@@ -340,6 +339,30 @@ do_kill(struct peer* p, struct term_req* req)
         req->status = NOT_FOUND;
     }
     small_resp(p, req);
+}*/
+
+static void
+do_kill(struct peer* p, struct term_req* req)
+{
+    int rv;
+
+    if(! isitpeer(p, req->path))
+    {
+        int rv = handler_delete_all_if(lambda(int, (struct peer* predic)
+        {
+            if(NULL != predic->p_username)
+                return NULL != strstr(req->path, predic->p_username);
+            else
+                return 0;
+        }));
+
+        req->status = (rv == 1) ? OK : NOT_FOUND;
+    }
+    else
+    {
+        req->status = FORBIDDEN;
+    }
+    small_resp(p, req);
 }
 
 static void
@@ -380,14 +403,14 @@ do_who(struct peer* p, struct term_req* req)
     if(n + offset <= p->p_buflen)
     {
         tocpy = offset;
-        strncpy(p->p_buffer, buf, tocpy);
+        strncpy(p->p_buffer + n, buf, tocpy);
         tosend = tocpy + n;
         sendall(p->p_sfd, p->p_buffer, &tosend);
     }
     else
     {
         tocpy = p->p_buflen - n;
-        strncpy(p->p_buffer, buf, tocpy);
+        strncpy(p->p_buffer + n, buf, tocpy);
         tosend = p->p_buflen;
         sendall(p->p_sfd, p->p_buffer, &tosend);
         tocpy = offset - p->p_buflen;
