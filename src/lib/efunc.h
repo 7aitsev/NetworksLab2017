@@ -1,15 +1,20 @@
 #ifndef EFUNC_H
 #define EFUNC_H
 
+#ifdef __WIN32__
+#include <winsock2.h>
+#else
+typedef int SOCKET;
+#endif
 #include <stddef.h>
 
 int
-readcrlf(int s, char *buf, size_t len);
+readcrlf(SOCKET sfd, char *buf, size_t bsize);
 
 int
-readn(int fd, char *bp, size_t len);
+readn(SOCKET sfd, char *buf, size_t len);
 
 int
-sendall(int sfd, const char* data, size_t* dsize);
+sendall(SOCKET sfd, const char* buf, size_t* bsize);
 
 #endif

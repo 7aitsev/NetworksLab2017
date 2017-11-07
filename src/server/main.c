@@ -1,5 +1,5 @@
-#include "logger/logger.h"
-#include "server/server.h"
+#include "../logger/logger.h"
+#include "../server/server.h"
 
 #include <stdio.h>
 

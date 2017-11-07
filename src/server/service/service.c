@@ -282,7 +282,7 @@ do_kill(struct peer* p, struct term_req* req)
 
     if(! isitpeer(p, req->path))
     {
-        int rv = handler_delete_all_if(lambda(int, (struct peer* predic)
+        rv = handler_delete_all_if(lambda(int, (struct peer* predic)
         {
             if(NULL != predic->p_username)
                 return NULL != strstr(req->path, predic->p_username);

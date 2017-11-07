@@ -1,5 +1,5 @@
-#include "efunc.h"
-#include "termproto.h"
+#include "../lib/efunc.h"
+#include "../lib/termproto.h"
 
 #include <ctype.h>
 #include <stdio.h>
