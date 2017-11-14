@@ -12,7 +12,7 @@
 int
 readcrlf(SOCKET sfd, char *buf, size_t bsize)
 {
-    char *bufx = buf;
+    char *p = buf;
     size_t len = bsize;
     int rc;
     char c;
@@ -29,12 +29,12 @@ readcrlf(SOCKET sfd, char *buf, size_t bsize)
         if('\n' == c)
         {
             if('\r' == lastc)
-                buf--;
-            *buf = '\0';
-            return buf - bufx + 1;
+                p--;
+            *p = '\0';
+            return p - buf + 1;
         }
 
-        *buf++ = c;
+        *p++ = c;
         lastc = c;
         len--;
     }
