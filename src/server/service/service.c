@@ -108,10 +108,11 @@ do_auth(struct peer* p, struct term_req* req)
                 if(rv != 0)
                 {
                     peer_set_mode(p, rv);
-                    peer_set_cwd(p, DEFAULT_PATH); // skip error checking
                     handler_perform(p, lambda(void, (struct peer* pp)
                     {
                         pp->p_username = malloc(11);
+
+                        peer_set_cwd(p, DEFAULT_PATH, TERMPROTO_BUF_SIZE);
                         strcpy(p->p_username, login);
                     }));
 
@@ -202,7 +203,12 @@ do_ls(struct peer* p, struct term_req* req)
 {
     struct dirent* entry;
     DIR* root;
-    int fdcwd = peer_get_fdcwd(p);
+    int fdcwd;
+
+    handler_perform(p, lambda(void, (struct peer* pp)
+    {
+        fdcwd = pp->p_cwd;
+    }));
 
     int cnt = count_names_len(fdcwd, req);
     if(-1 == cnt)
@@ -243,15 +249,22 @@ do_ls(struct peer* p, struct term_req* req)
 static void
 do_cd(struct peer* p, struct term_req* req)
 {
-    int rv = peer_set_cwd(p, req->path);
+    int rv;
+    handler_perform(p, lambda(void, (struct peer* pp)
+    {
+        rv = peer_set_cwd(pp, req->path, TERMPROTO_PATH_SIZE);
+    }));
     if(0 == rv)
     {
-        char buf[TERMPROTO_BUF_SIZE];
-        peer_get_cwd(p, buf, TERMPROTO_PATH_SIZE);
+        char* path;
+        handler_perform(p, lambda(void, (struct peer* pp)
+        {
+            path = pp->p_cwdpath;
+        }));
         req->status = OK;
-        req->msg = buf;
+        req->msg = path;
         small_resp(p, req);
-        logger_log("[service] chdir=%s\n", buf);
+        logger_log("[service] chdir=%s\n", path);
     }
     else
     {
@@ -309,8 +322,6 @@ do_who(struct peer* p, struct term_req* req)
     int peers_cnt = 0;
     int bsize = 6 * TERMPROTO_BUF_SIZE; // big enough for 20 peers
     char* buf = malloc(bsize);
-    int pathlen = TERMPROTO_PATH_SIZE;
-    char pathbuf[pathlen];
 
     if(NULL == buf)
     {
@@ -327,7 +338,7 @@ do_who(struct peer* p, struct term_req* req)
             ++peers_cnt;
             offset += sprintf(buf + offset, "%d\t%s\t%d\t%s\n",
                     pp->p_id, pp->p_username, mode,
-                    peer_get_cwd(pp, pathbuf, pathlen));
+                    pp->p_cwdpath);
         }
     }));
     offset += sprintf(buf + offset, "TOTAL: %d\n", peers_cnt);

@@ -62,9 +62,8 @@ peer_printinfo(struct peer* p)
             p->p_id, ipstr, port, p->p_sfd);
     if(PEER_NO_PERMS != mode)
     {
-        char buf[256]; // :(
         printf("\tUsername: %s\n\tCWD: %s\n\tMode: %d\n",
-                p->p_username, peer_get_cwd(p, buf, 256), mode);
+                p->p_username, p->p_cwdpath, mode);
     }
     else
     {
@@ -80,6 +79,7 @@ peer_destroy(struct peer* p)
         close(p->p_cwd);
     free(p->p_username);
     free(p->p_buffer);
+    free(p->p_cwdpath);
     memset(p, 0, sizeof(struct peer));
 }
 
@@ -115,61 +115,47 @@ peer_set_mode(struct peer* p, char mode)
 }
 
 int
-peer_get_fdcwd(struct peer* p)
-{
-    return __sync_fetch_and_or(&p->p_cwd, 0);
-}
-
-char*
-peer_get_cwd(struct peer* p, char* rpath, size_t rplen)
-{
-    char path[rplen];
-    int fdcwd = peer_get_fdcwd(p);
-
-    sprintf(path, "/proc/self/fd/%d", fdcwd);
-    memset(rpath, 0, rplen);
-    if(-1 != readlink(path, rpath, rplen - 1))
-    {
-        return rpath;
-    }
-    logger_log("[peer] readlink error: %s\n", strerror(errno));
-    return NULL;
-}
-
-int
-peer_set_cwd(struct peer* p, const char* path)
+peer_set_cwd(struct peer* p, const char* path, int psize)
 {
     int dirfd;
-    int cwd = peer_get_fdcwd(p);
+    struct stat path_stat;
 
-    if(STDIN_FILENO == cwd)
+    char* resolved = realpath(path, NULL); // allocates memory
+    if(NULL == resolved)
     {
-        dirfd = open(path, O_RDONLY);
-        if(-1 == dirfd)
-        {
-            return -1;
-        }
-        __sync_add_and_fetch(&p->p_cwd, dirfd);
+        logger_log("[peer] realpath failed for: path=%s\n", path);
+        return -1;
+    }
+    resolved[psize - 1] = '\0';
+
+    dirfd = open(resolved, O_RDONLY);
+    if(-1 == dirfd)
+    {
+        logger_log("[peer] truncated?\npath=%s\n", resolved);
+        free(resolved);
+        return -1;
+    }
+
+    fstat(dirfd, &path_stat);
+    if(!S_ISDIR(path_stat.st_mode))
+    {
+        errno = ENOTDIR;
+        close(dirfd);
+        free(resolved);
+        return -1;
+    }
+
+    free(p->p_cwdpath);
+    p->p_cwdpath = resolved;
+
+    if(STDIN_FILENO != p->p_cwd)
+    {
+        dup2(dirfd, p->p_cwd); // assume this doesn't fail
+        close(dirfd);
     }
     else
     {
-        struct stat path_stat;
-
-        dirfd = openat(cwd, path, O_RDONLY);
-        if(-1 == dirfd)
-        {
-            return -1;
-        }
-        
-        fstat(dirfd, &path_stat);
-        if(!S_ISDIR(path_stat.st_mode))
-        {
-            errno = ENOTDIR;
-            return -1;
-        }
-
-        dup2(dirfd, cwd); // assume this doesn't fail
-        close(dirfd);
+        p->p_cwd = dirfd;
     }
     return 0;
 }
