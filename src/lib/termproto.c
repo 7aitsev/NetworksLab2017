@@ -38,7 +38,7 @@ term_get_status_desc(int status)
 }
 
 static int
-isstrin(const char* str, const char * const set[], size_t latest_el)
+find_str_idx(const char* str, const char * const set[], size_t latest_el)
 {
     size_t i;
 
@@ -58,13 +58,13 @@ isstrin(const char* str, const char * const set[], size_t latest_el)
 int
 term_is_valid_method(const char* method)
 {
-    return isstrin(method, TERM_METHOD_STRING, LOGOUT);
+    return find_str_idx(method, TERM_METHOD_STRING, LOGOUT);
 }
 
 int
 term_is_valid_status(const char* status)
 {
-    return isstrin(status, TERM_STATUS_ALL, INTERNAL_ERROR);
+    return find_str_idx(status, TERM_STATUS_ALL, INTERNAL_ERROR);
 }
 
 static int
