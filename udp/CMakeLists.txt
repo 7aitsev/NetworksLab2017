@@ -5,7 +5,7 @@ include_directories(.)
 
 set(CMAKE_C_FLAGS "-Wall -Wextra -g -O0 -DWINVER=0x0600")
 
-set(_MODULES "./logger ./server ./server/terminal ")
+set(_MODULES "./logger ./server ./server/terminal ./server/handler ./server/handler/peer ")
 #message("${_MODULES}")
 string(REGEX REPLACE "(([a-z]+) )" "\\2/\\2.\# " MODULES ${_MODULES})
 #message("${MODULES}")

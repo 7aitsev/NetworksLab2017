@@ -1,5 +1,5 @@
 #include "logger/logger.h"
-// #include "server/handler/handler.h"
+#include "server/handler/handler.h"
 #include "server/terminal/terminal.h"
 
 #include <stdio.h>
@@ -28,7 +28,7 @@ action_quit()
         logger_log("[terminal] callback == NULL\n");
     }
 }
-/*
+
 static void
 action_show_status()
 {
@@ -37,7 +37,7 @@ action_show_status()
             handler_getcurrent(), handler_gettotal());
     handler_foreach(&peer_printinfo);
 }
-
+/*
 static void
 action_kill(peer_t peer)
 {
@@ -64,11 +64,11 @@ terminal_loop()
         {
             action_quit();
             break;
-        }/*
+        }
         else if(0 == strcmp(inpline, "status\n"))
         {
-            terminal_action_show_status();
-        }
+            action_show_status();
+        }/*
         else if(1 == sscanf(inpline, "k %hd\n", &peer))
         {
             terminal_action_kill(peer);

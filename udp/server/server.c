@@ -1,5 +1,5 @@
 #include "logger/logger.h"
-//#include "server/handler/handler.h"
+#include "server/handler/handler.h"
 #include "server/server.h"
 #include "server/terminal/terminal.h"
 
@@ -111,70 +111,34 @@ server_init(const char* host, const char* port)
     return rv;
 }
 
-/*
-static void*
-server_acceptloop()
-{
-    int slave;
-    int master = this.listensocket;
-    struct sockaddr_storage sa_peer;
-    socklen_t addrsize = sizeof(sa_peer);
-
-    __sync_fetch_and_or(&this.isrunning, 1);
-    while(1)
-    {
-        slave = accept(master, (struct sockaddr*) &sa_peer, &addrsize);
-        if(-1 != slave)
-        {
-            logger_log("[server] new peer: %d\n", slave);
-            handler_new(slave);
-        }
-        else
-        {
-            if(!__sync_and_and_fetch(&this.isrunning, 1))
-            {
-                break;
-            }
-            else if(EINTR != errno)
-            {
-                logger_log("[server] accept(): %s\n", strerror(errno));
-                return NULL;
-            }
-        }
-    }
-
-    return NULL;
-}*/
-
 void
 server_run()
 {
-    // handler_init();
+    handler_init();
 
     int bytes;
-    char buf[100];
+    int bufsize = 1024;
+    char buf[bufsize];
     struct sockaddr_storage sa_peer;
-    socklen_t thathost_len = sizeof(sa_peer);
+    socklen_t sa_peer_len = sizeof(sa_peer);
 
     __sync_fetch_and_or(&this.isrunning, 1);
     while(1)
     {
         bytes = recvfrom(this.master, buf, sizeof(buf), 0,
-                         (struct sockaddr*) &sa_peer, &thathost_len);
+                         (struct sockaddr*) &sa_peer, &sa_peer_len);
         if(0 < bytes)
         {
             buf[bytes] = '\0';
-            if(0 != strcmp(buf, "OFF\n"))
-            {
-                logger_log("[server] recv: %s\n", buf);
-            }
-            else
-            {
-                break;
-            }
+            
+            handler_new(buf, bufsize, &sa_peer);
 
-            sendto(this.master, "I got your message", 18, 0,
-                   (struct sockaddr*) &sa_peer, thathost_len);
+            bytes = sendto(this.master, "I got your message", 18, 0,
+                           (struct sockaddr*) &sa_peer, sa_peer_len);
+            if(-1 == bytes)
+            {
+                logger_log("[server] sento() failed: %s\n", error());
+            }
         }
         else if(0 == bytes)
         {
@@ -203,7 +167,7 @@ void
 server_destroy()
 {
     WSACleanup();
-    //terminal_stop();
+    terminal_stop();
 
-    // handler_destroy();
+    handler_destroy();
 }
