@@ -55,7 +55,7 @@ logger_log(const char* format, ...)
     static const int limit = LOGGER_BUFFER_SIZE;
 
     EnterCriticalSection(&g_logger.l_sp);
-    
+
     struct logdata* ld = g_logger.l_ld;
 
     // if logger_loop has not handled messages yet
@@ -160,7 +160,7 @@ logger_flush()
     EnterCriticalSection(&g_logger.l_sp);
     struct logdata* ld = g_logger.l_ld;
     int* buflen = &g_logger.l_buflen;
-    
+
     waitfor(&ld->ld_isready);
 
     if(0 < *buflen)
@@ -186,7 +186,7 @@ void
 logger_destroy()
 {
     struct logger* p = &g_logger;
-    
+
     if(NULL != p->l_tid)
     {
         logger_flush();

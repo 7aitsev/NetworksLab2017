@@ -1,5 +1,5 @@
 #include "../logger/logger.h"
-//#include "../server/server.h"
+#include "../server/server.h"
 #include <stdio.h>
 
 int
@@ -12,8 +12,8 @@ main(int argc, char** argv)
     }
 
     logger_init();
-/*
-    if(-1 != server_prepare(argv[1], argv[2]))
+
+    if(-1 != server_init(argv[1], argv[2]))
     {
         logger_log("[main] starting the server...\n");
         server_run();
@@ -23,7 +23,7 @@ main(int argc, char** argv)
         logger_log("[main] server has not started\n");
     }
 
-    server_join();*/
+    server_destroy();
     logger_log("[main] server has shut down\n");
     logger_destroy();
 
