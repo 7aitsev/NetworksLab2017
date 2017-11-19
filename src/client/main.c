@@ -40,15 +40,19 @@ print_prompt()
 void
 error(const char *err_msg, const SOCKET *socket, void (*exit)(int))
 {
-    char *dec_err_code = NULL;
+    static char buf[1024];
     if(0 != WSAGetLastError())
     {
-        if(0 == FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM,
-                0, (DWORD) WSAGetLastError(), 0, (LPSTR) &dec_err_code, 0, 0))
+        if(0 == FormatMessage( // 0 means failure
+            FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
+            NULL, GetLastError(), 0, buf, 1024, NULL))
         {
-            *dec_err_code = '\0';
+            fprintf(stderr, "FormatMessage() failed: err=0x%lx\n", GetLastError());
         }
-        fprintf(stderr, "%s:\n%s\n", err_msg, dec_err_code);
+        else
+        {
+            fprintf(stderr, "%s:\n%s\n", err_msg, buf);
+        }
     }
     else
     {
