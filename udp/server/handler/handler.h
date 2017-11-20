@@ -27,10 +27,10 @@ handler_getcurrent();
 
 peer_t
 handler_gettotal();
-/*
+
 int
 handler_delete_first_if(int (*predicate)(struct peer* ppeer));
-*/
+
 int
 handler_delete_all_if(int (*predicate)(struct peer* ppeer));
 

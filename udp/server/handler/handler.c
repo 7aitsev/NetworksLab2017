@@ -163,13 +163,19 @@ deletepeer(struct peer* p)
 }
 
 int
+handler_delete_first_if(int (*predicate)(struct peer* ppeer))
+{
+    return handler_find_first_and_apply(predicate, deletepeer);
+}
+
+int
 handler_delete_all_if(int (*predicate)(struct peer* ppeer))
 {
-    return handler_find_all_and_apply(predicate, &deletepeer);
+    return handler_find_all_and_apply(predicate, deletepeer);
 }
 
 void
 handler_foreach(void (*cb)(struct peer* p))
 {
-    handler_find_all_and_apply(&peer_is_exist, cb);
+    handler_find_all_and_apply(peer_is_exist, cb);
 }

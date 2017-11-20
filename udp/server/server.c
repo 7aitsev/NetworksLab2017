@@ -102,11 +102,8 @@ server_init(const char* host, const char* port)
     }
 
     rv = trybind(servinfo);
-    if(rv == 0)
-    {
-        logger_log("[server] starting terminal\n");
-        terminal_run(server_stop);
-    }
+    if(0 == rv && -1 == terminal_run(server_stop))
+        return -1;
 
     return rv;
 }
@@ -119,47 +116,66 @@ server_run()
     int bytes;
     int bufsize = 1024;
     char buf[bufsize];
+    WSANETWORKEVENTS network_events;
     struct sockaddr_storage sa_peer;
     socklen_t sa_peer_len = sizeof(sa_peer);
 
-    __sync_fetch_and_or(&this.isrunning, 1);
-    while(1)
-    {
-        bytes = recvfrom(this.master, buf, sizeof(buf), 0,
-                         (struct sockaddr*) &sa_peer, &sa_peer_len);
-        if(0 < bytes)
-        {
-            buf[bytes] = '\0';
-            
-            handler_new(buf, bufsize, &sa_peer);
+    WSAEVENT events[2] = {WSACreateEvent(), terminal_get_input_event()};
+    WSAEventSelect(this.master, events[0], FD_READ);
 
-            bytes = sendto(this.master, "I got your message", 18, 0,
-                           (struct sockaddr*) &sa_peer, sa_peer_len);
-            if(-1 == bytes)
-            {
-                logger_log("[server] sento() failed: %s\n", error());
-            }
-        }
-        else if(0 == bytes)
+    this.isrunning = 1;
+    while(this.isrunning)
+    {
+        DWORD result = WSAWaitForMultipleEvents(2, events, FALSE, 5000, FALSE);
+        switch(result)
         {
-            break;
-        }
-        else
-        {
-            if(!__sync_and_and_fetch(&this.isrunning, 1))
-            {
+            case WAIT_TIMEOUT:
+                // send keep alive messages to all pears, make cleanup of expired ones
                 break;
-            }
-            logger_log("[server] recvfrom failed: %s\n", error());
-            break;
+            case WAIT_OBJECT_0:
+                WSAEnumNetworkEvents(this.master, events[0], &network_events);
+                bytes = recvfrom(this.master, buf, sizeof(buf), 0,
+                                 (struct sockaddr*) &sa_peer, &sa_peer_len);
+                if(0 < bytes)
+                {
+                    buf[bytes] = '\0';
+
+                    handler_new(buf, bufsize, &sa_peer);
+
+                    bytes = sendto(this.master, "I got your message", 18, 0,
+                                   (struct sockaddr*) &sa_peer, sa_peer_len);
+                    if(-1 == bytes)
+                    {
+                        logger_log("[server] sento() failed: %s\n", error());
+                        this.isrunning = 0;
+                    }
+                }
+                else if(0 != bytes)
+                {
+                    logger_log("[server] recvfrom failed: %s\n", error());
+                    this.isrunning = 0;
+                }
+                break;
+            case WAIT_OBJECT_0 + 1:
+                if(-1 == terminal_handle_action())
+                    this.isrunning = 0;
+                break;
+            case WAIT_FAILED:
+                logger_log("the function has failed: %ld\n", GetLastError());
+                this.isrunning = 0;
+                break;
+            default:
+                logger_log("unexpected case %ld\n", result);
+                this.isrunning = 0;
         }
     }
+    CloseHandle(events[0]);
 }
 
 void
 server_stop()
 {
-    __sync_fetch_and_and(&this.isrunning, 0);
+    this.isrunning = 0;
     closesocket(this.master);
 }
 
