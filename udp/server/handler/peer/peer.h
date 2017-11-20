@@ -23,6 +23,7 @@ struct peer
     char p_ipstr[INET_ADDRSTRLEN];
     unsigned short int p_port;
 
+    peer_t p_seq;
     char* p_username; // null-terminated
     char p_mode;
     int p_cwd;
@@ -52,5 +53,8 @@ peer_cpy_addr(struct peer* p, struct sockaddr_in* addr);
 
 void
 peer_destroy(struct peer* p);
+
+int
+peer_check_order(struct peer* p, unsigned int seq);
 
 #endif

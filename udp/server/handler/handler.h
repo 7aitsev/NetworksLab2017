@@ -1,8 +1,6 @@
 #ifndef HANDLER_H
 #define HANDLER_H
 
-#include <ws2tcpip.h>
-
 #include "server/handler/peer/peer.h"
 
 #define HANDLER_BUFSIZE 1024
@@ -19,7 +17,7 @@ handler_init();
 void
 handler_destroy();
 
-void
+int
 handler_new(char* buf, int bufsize, struct sockaddr_storage* addr);
 
 peer_t

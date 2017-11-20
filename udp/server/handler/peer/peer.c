@@ -85,3 +85,9 @@ peer_destroy(struct peer* p)
     free(p->p_cwdpath);
     memset(p, 0, sizeof(struct peer));
 }
+
+int
+peer_check_order(struct peer* p, unsigned int seq)
+{
+    return (p->p_seq < seq) ? 0 : -1;
+}

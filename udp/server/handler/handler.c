@@ -1,6 +1,6 @@
 #include "logger/logger.h"
 #include "server/handler/handler.h"
-// #include "server/service/service.h"
+#include "server/service/service.h"
 
 #include <errno.h>
 #include <stdlib.h>
@@ -16,10 +16,6 @@ static peer_t g_total;
 
 static peer_t g_peerslen;
 static struct peer* g_peers;
-
-static struct peer* g_peer; // current peer which is handled
-static char* g_buf;
-static int g_bufsize;
 
 void
 handler_init()
@@ -97,23 +93,28 @@ handler_find_all_and_apply(int (*predicate)(struct peer* ppeer),
     return wasfound;
 }
 
-void
+/**
+ * -1 - no action required
+ *  0 - a response has to be sent
+ */
+int
 handler_new(char* buf, int bufsize, struct sockaddr_storage* addr)
 {
+    struct peer* _peer;
     struct sockaddr_in* peer_addr;
 
     if(-1 == peer_check_family(addr))
     {
         logger_log("[server] unsupported adress family: %d\n",
                 addr->ss_family);
-        return;
+        return -1;
     }
 
     peer_addr = (struct sockaddr_in*) addr;
-    g_peer = get_peer_from_array(peer_addr);
-    if(NULL == g_peer) // new peer
+    _peer = get_peer_from_array(peer_addr);
+    if(NULL == _peer) // new peer
     {
-logger_log("[handler] peer was not found\n");
+        logger_log("[handler] adding peer...\n");
         int was_found = handler_find_first_and_apply(
             peer_is_not_exist,
             lambda(void, (struct peer* p)
@@ -121,34 +122,21 @@ logger_log("[handler] peer was not found\n");
                 ++g_current;
                 p->p_id = ++g_total;
                 peer_cpy_addr(p, peer_addr);
-logger_log("[handler] peer was added to array\n");
-                g_peer = p;
+                logger_log("[handler] peer was added to the array\n");
+                _peer = p;
             })
         );
 
         if(! was_found)
         {
-logger_log("[handler] Reached the peers limit\n");
-            return;
+            logger_log("[handler] reached the peers limit\n");
+            return -1;
         }
     }
-    
-    g_buf = buf;
-    g_bufsize = bufsize;
-    
-logger_log("[handler] peer exists\n");
-    /*
-    parse request
-    check order
-    if order is correct (req.seq >= peer.seq)
-    {
-        handle request
-        send response with the same seq
-        increment next expected seq (peer.seq = req.seq++)
-    }
-    else
-        ignore
-    */
+
+    logger_log("[handler] received \"%s\"\n", buf);
+    // a response is going to be in the buffer
+    return service(buf, bufsize, _peer); // return how many bytes to send
 }
 
 static void

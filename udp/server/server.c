@@ -5,7 +5,6 @@
 
 #include <stdio.h>
 #include <string.h>
-#include <ws2tcpip.h>
 #include <winsock2.h>
 
 #define SERVER_BACKLOG 5
@@ -14,7 +13,7 @@ struct serverdata
 {
     const char* host;
     const char* port;
-    int isrunning;
+    int is_running;
     SOCKET master;
 };
 
@@ -109,22 +108,55 @@ server_init(const char* host, const char* port)
 }
 
 void
+handle_master_socket(WSAEVENT event)
+{
+    static int bytes;
+    static const int bufsize = 1024;
+    static char buf[1024];
+    static WSANETWORKEVENTS network_events;
+    static struct sockaddr_storage sa_peer;
+    static socklen_t sa_peer_len = sizeof(sa_peer);
+    
+    WSAEnumNetworkEvents(this.master, event, &network_events);
+    bytes = recvfrom(this.master, buf, sizeof(buf), 0,
+                     (struct sockaddr*) &sa_peer, &sa_peer_len);
+    if(0 < bytes)
+    {
+        buf[bytes] = '\0';
+
+        if(0 < (bytes = handler_new(buf, bufsize, &sa_peer)))
+        {
+            bytes = sendto(this.master, buf, bytes, 0,
+                           (struct sockaddr*) &sa_peer, sa_peer_len);
+            logger_log("[server] was sent %d bytes\n", bytes);
+            if(-1 == bytes)
+            {
+                logger_log("[server] sento() failed: %s\n", error());
+                this.is_running = 0;
+            }
+        }
+    }
+    else if(0 == bytes)
+    {
+        //keep alive
+    }
+    else
+    {
+        logger_log("[server] recvfrom failed: %s\n", error());
+        this.is_running = 0;
+    }
+}
+
+void
 server_run()
 {
     handler_init();
 
-    int bytes;
-    int bufsize = 1024;
-    char buf[bufsize];
-    WSANETWORKEVENTS network_events;
-    struct sockaddr_storage sa_peer;
-    socklen_t sa_peer_len = sizeof(sa_peer);
-
     WSAEVENT events[2] = {WSACreateEvent(), terminal_get_input_event()};
     WSAEventSelect(this.master, events[0], FD_READ);
 
-    this.isrunning = 1;
-    while(this.isrunning)
+    this.is_running = 1;
+    while(this.is_running)
     {
         DWORD result = WSAWaitForMultipleEvents(2, events, FALSE, 5000, FALSE);
         switch(result)
@@ -133,40 +165,19 @@ server_run()
                 // send keep alive messages to all pears, make cleanup of expired ones
                 break;
             case WAIT_OBJECT_0:
-                WSAEnumNetworkEvents(this.master, events[0], &network_events);
-                bytes = recvfrom(this.master, buf, sizeof(buf), 0,
-                                 (struct sockaddr*) &sa_peer, &sa_peer_len);
-                if(0 < bytes)
-                {
-                    buf[bytes] = '\0';
-
-                    handler_new(buf, bufsize, &sa_peer);
-
-                    bytes = sendto(this.master, "I got your message", 18, 0,
-                                   (struct sockaddr*) &sa_peer, sa_peer_len);
-                    if(-1 == bytes)
-                    {
-                        logger_log("[server] sento() failed: %s\n", error());
-                        this.isrunning = 0;
-                    }
-                }
-                else if(0 != bytes)
-                {
-                    logger_log("[server] recvfrom failed: %s\n", error());
-                    this.isrunning = 0;
-                }
+                handle_master_socket(events[0]);
                 break;
             case WAIT_OBJECT_0 + 1:
                 if(-1 == terminal_handle_action())
-                    this.isrunning = 0;
+                    this.is_running = 0;
                 break;
             case WAIT_FAILED:
                 logger_log("the function has failed: %ld\n", GetLastError());
-                this.isrunning = 0;
+                this.is_running = 0;
                 break;
             default:
                 logger_log("unexpected case %ld\n", result);
-                this.isrunning = 0;
+                this.is_running = 0;
         }
     }
     CloseHandle(events[0]);
@@ -175,7 +186,7 @@ server_run()
 void
 server_stop()
 {
-    this.isrunning = 0;
+    this.is_running = 0;
     closesocket(this.master);
 }
 
