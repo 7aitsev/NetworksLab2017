@@ -70,9 +70,9 @@ term_parse_req(struct term_req* req, const char* buf)
     char method[METHOD_SIZE];
 
     errno = 0;
+    req->seq = 0;
     int rv = sscanf(buf, "%u %7[A-Z] %255s",
                     &req->seq, method, req->path);
-logger_log("was scanned %d arguments\n", rv);
     if(3 == rv)
     {
         rv = term_is_valid_method(method);

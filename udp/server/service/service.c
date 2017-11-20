@@ -9,8 +9,8 @@
 
 #define DEFAULT_PATH "/"
 #define DB_ACCOUNTS "/tmp/accounts"
-/*
-static const char * const MSG_EMPTY = "";
+
+static const char * const MSG_EMPTY = "";/*
 static const char * const AUTH_MULTIPLE = "You\'ve been authorised";
 static const char * const AUTH_BAD_TRY = "Unable to log in";
 static const char * const AUTH_GRANTED = "Successful authentication";
@@ -19,28 +19,29 @@ char* g_buf;
 int g_bufsize;
 struct peer* g_peer;
 int g_bytes_to_send;
+struct term_req g_req;
 
 static void
-error_term(struct term_req* req)
+error_term()
 {
     g_bytes_to_send = 
-        term_put_header(g_buf, g_bufsize, 1, req->status);
+        term_put_header(g_buf, g_bufsize, 0, g_req.status);
 }
-/*
+
 static void
-small_resp(struct peer* p, struct term_req* req)
+small_resp()
 {
     size_t respsize;
-    size_t bodylen = strlen(req->msg);
 
-    bodylen += (bodylen > 0) ? 2 : 0;
-    respsize = term_put_header(p->p_buffer, p->p_buflen, req->status,
-            bodylen);
-    if(MSG_EMPTY != req->msg)
-        respsize += sprintf(p->p_buffer + respsize, "%s\r\n", req->msg);
-    sendall(p->p_sfd, p->p_buffer, &respsize);
+    respsize = term_put_header(g_buf, g_bufsize, g_peer->p_seq,
+        g_req.status);
+    if(MSG_EMPTY != g_req.msg)
+    {
+        respsize += sprintf(g_buf + respsize, "%s\r\n", g_req.msg);
+    }
+    g_bytes_to_send = respsize;
 }
-
+/*
 static char*
 get_username(struct peer* p, char* login)
 {
@@ -373,65 +374,52 @@ do_logout(struct peer* p, struct term_req* req)
     small_resp(p, req);
 }
 */
-/*
-static int
-handle_req(struct peer* p)
+
+static void
+handle_req()
 {
-    int rv;
-    struct term_req req;
+    g_req.msg = MSG_EMPTY;
+    int method_kill = (g_req.method == KILL);
 
-    rv = term_parse_req(&req, p->p_buffer);
-    if(0 == rv)
+    if(PEER_SUPER == g_peer->p_mode && method_kill)
     {
-        req.msg = MSG_EMPTY;
-        int methiskill = (req.method == KILL);
-
-        if(PEER_SUPER == peer_get_mode(p) && methiskill)
+        // do_kill();
+    }
+    else if(PEER_NO_PERMS < g_peer->p_mode && !method_kill)
+    {
+        switch(g_req.method)
         {
-            do_kill(p, &req);
+            case AUTH:
+                // do_auth();
+                break;
+            case CD:
+                // do_cd();
+                break;
+            case LS:
+                // do_ls();
+                break;
+            case WHO:
+                // do_who();
+                break;
+            case LOGOUT:
+                // do_logout();
+                // if(OK == g_req.status)
+                    // return 1;
+                break;
+            default:
+                logger_log("[handler] not implemented\n");
         }
-        else if(PEER_NO_PERMS < peer_get_mode(p) && !methiskill)
-        {
-            switch(req.method)
-            {
-                case AUTH:
-                    do_auth(p, &req);
-                    break;
-                case CD:
-                    do_cd(p, &req);
-                    break;
-                case LS:
-                    do_ls(p, &req);
-                    break;
-                case WHO:
-                    do_who(p, &req);
-                    break;
-                case LOGOUT:
-                    do_logout(p, &req);
-                    if(OK == req.status)
-                        return 1;
-                    break;
-                default:
-                    logger_log("[handler] not implemented\n");
-            }
-        }
-        else if(req.method == AUTH)
-        {
-            do_auth(p, &req);
-        }
-        else
-        {
-            req.status = FORBIDDEN;
-            small_resp(p, &req);
-        }
+    }
+    else if(g_req.method == AUTH)
+    {
+        // do_auth();
     }
     else
     {
-        error_term(p->p_sfd, &req);
+        g_req.status = FORBIDDEN;
+        small_resp();
     }
-    return 0;
 }
-*/
 
 int
 service(char* buf, int bufsize, struct peer* p)
@@ -439,40 +427,38 @@ service(char* buf, int bufsize, struct peer* p)
     g_buf = buf;
     g_bufsize = bufsize;
     g_peer = p;
-    struct term_req req;
 
-    int rv = term_parse_req(&req, buf);
+    int rv = term_parse_req(&g_req, buf);
 
-    if(0 == rv)
+    if(0 != g_req.seq) // successfully parsed seq number
     {
-        strcpy(buf, "Hello there\n");
-        g_bytes_to_send = 13;
+        if(0 == peer_check_order(g_peer, g_req.seq)) // it's a new request
+        {
+            g_peer->p_seq = g_req.seq;
+            if(rv == 0) // request is correct
+            {
+                handle_req();
+            }
+            else // we can use seq number to send a bad response
+            {
+                small_resp();
+            }
+        }
+        else // ignore - whether the request is bad or not
+        {
+            logger_log("[handler] received unordered request: "
+                "peer.seq=%hu, req.seq=%hu\n", g_peer->p_seq, g_req.seq);
+            return 0; // ignore - server is not going to send 0 bytes
+        }
     }
     else
     {
-        error_term(&req);
+        error_term(); // send error response with seq number = 0
     }
 
     logger_log("[service] parsed=%d, to send %d\n", rv, g_bytes_to_send);
     return g_bytes_to_send;
 /*
-    rv = peer_check_order(&_peer, req->seq);
-    if(ok == rv)
-    {
-        service(&req);
-        ++_peer->seq;
-    }
-    else
-    {
-        logger_log("[handler] received unordered request: "
-            "peer.seq=%hu, req.seq=%hu\n", peer->p_seq, req->seq);
-        return 0;
-    }
-    return 1;
-
-
-
-    parse request
     check order
     if order is correct (req.seq >= peer.seq)
     {
@@ -484,43 +470,3 @@ service(char* buf, int bufsize, struct peer* p)
         ignore
 */
 }
-/*
-void
-service(struct peer* p)
-{
-    int sfd = p->p_sfd;
-    size_t len = TERMPROTO_BUF_SIZE;
-    char* buffer = malloc(len);
-
-    if(NULL != buffer)
-    {
-        p->p_buffer = buffer;
-        p->p_buflen = len;
-
-        while(1)
-        {
-            memset(buffer, 0, len);
-            int rv = readcrlf(sfd, buffer, len);
-            if(0 < rv)
-            {
-                rv = handle_req(p);
-                if(1 == rv)
-                    return;
-            }
-            else if(0 == rv)
-            {
-                logger_log("[handler] peer #%hd hung up\n", p->p_id);
-                break;
-            }
-            else
-            {
-                logger_log("[handler] readcrlf: %s\n", strerror(errno));
-                break;
-            }
-        }
-    }
-    else
-    {
-        logger_log("[peer] malloc failed: %s\n", strerror(errno));
-    }
-}*/
