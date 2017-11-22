@@ -120,13 +120,23 @@ peer_set_cwd(struct peer* p, const char* path, int psize)
     int dirfd;
     struct stat path_stat;
 
-    char* resolved = realpath(path, NULL); // allocates memory
+    char* resolved;
+    if('/' != path[0])
+    {
+        char buf[2 * psize];
+        sprintf(buf, "%s/%s", p->p_cwdpath, path);
+        resolved = realpath(buf, NULL);
+    }
+    else
+    {
+        resolved = realpath(path, NULL);
+    }
+
     if(NULL == resolved)
     {
         logger_log("[peer] realpath failed for: path=%s\n", path);
         return -1;
     }
-    resolved[psize - 1] = '\0';
 
     dirfd = open(resolved, O_RDONLY);
     if(-1 == dirfd)
@@ -148,14 +158,10 @@ peer_set_cwd(struct peer* p, const char* path, int psize)
     free(p->p_cwdpath);
     p->p_cwdpath = resolved;
 
-    if(STDIN_FILENO != p->p_cwd)
+    if(0 != p->p_cwd)
     {
-        dup2(dirfd, p->p_cwd); // assume this doesn't fail
-        close(dirfd);
+        close(p->p_cwd);
     }
-    else
-    {
-        p->p_cwd = dirfd;
-    }
+    p->p_cwd = dirfd;
     return 0;
 }

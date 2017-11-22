@@ -112,7 +112,7 @@ do_auth(struct peer* p, struct term_req* req)
                     {
                         pp->p_username = malloc(11);
 
-                        peer_set_cwd(p, DEFAULT_PATH, TERMPROTO_BUF_SIZE);
+                        peer_set_cwd(p, DEFAULT_PATH, 0);
                         strcpy(p->p_username, login);
                     }));
 
