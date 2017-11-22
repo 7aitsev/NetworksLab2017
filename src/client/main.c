@@ -445,7 +445,7 @@ parse_cmd(const char* buf)
     g_req.path[0] = '\0';
 
     errno = 0;
-    rv = sscanf(buf, "%7s %255s\r\n", method, g_req.path);
+    rv = sscanf(buf, "%7s %255[^\r\n]", method, g_req.path);
     if(0 < rv)
     {
         int cmd;

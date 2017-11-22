@@ -67,48 +67,29 @@ term_is_valid_status(const char* status)
     return find_str_idx(status, TERM_STATUS_ALL, INTERNAL_ERROR);
 }
 
-static int
-fill_term_req(struct term_req* req, const char* method, char* path)
-{
-    int rv;
-    
-    if(-1 == (rv = term_is_valid_method(method)))
-    {
-        req->status = BAD_REQUEST;
-        return -1;
-    }
-    req->method = rv;
-
-    memset(req->path, 0, TERMPROTO_PATH_SIZE);
-    strncpy(req->path, path, TERMPROTO_PATH_SIZE);
-    if(req->path[TERMPROTO_PATH_SIZE - 1] != '\0')
-    {
-        // path is too long, but the request itself is ok
-        req->status = INTERNAL_ERROR;
-        req->path[TERMPROTO_PATH_SIZE - 1] = '\0';
-        return -1;
-    }
-    free(path);
-
-    return 0;
-}
-
 int
 term_parse_req(struct term_req* req, const char* buf)
 {
     char method[8];
-    char* path = NULL;
 
     int rv;
     errno = 0;
-    if(2 == (rv = sscanf(buf, "%7[A-Z] %255ms", method, &path)))
+    rv = sscanf(buf, "%7[A-Z] %255[^\r\n]",
+                    method, req->path);
+    if(2 == rv)
     {
-        return fill_term_req(req, method, path);
+        rv = term_is_valid_method(method);
+        if(-1 == rv)
+        {
+            req->status = BAD_REQUEST;
+            return -1;
+        }
+        req->method = rv;
+        return 0;
     }
     else if(0 < rv)
     {
         logger_log("[termproto] Not all values were matched\n");
-        free(path);
         req->status = BAD_REQUEST;
     }
     else if(0 == errno)
