@@ -1,5 +1,5 @@
-#include "../lib/efunc.h"
-#include "../lib/termproto.h"
+#include "lib/efunc.h"
+#include "lib/termproto.h"
 
 #include <ctype.h>
 #include <stdio.h>
@@ -10,8 +10,6 @@
 
 #include <winsock2.h>
 #include <ws2tcpip.h>
-
-#define EMPTY_MSG ""
 
 static SOCKET g_sfd;
 static struct term_req g_req;

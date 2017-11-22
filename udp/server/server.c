@@ -8,8 +8,6 @@
 #include <string.h>
 #include <winsock2.h>
 
-#define SERVER_BACKLOG 5
-
 struct serverdata
 {
     const char* host;
