@@ -3,8 +3,8 @@ project(udp_service)
 
 include_directories(.)
 
-set(DEPS_H ./lib/termproto.h)
-set(DEPS_S ./lib/termproto.c)
+set(DEPS_H ./lib/termproto.h ./lib/werror.h)
+set(DEPS_S ./lib/termproto.c ./lib/werror.c)
 
 set(CMAKE_C_FLAGS "-Wall -Wextra -g -O0 -DWINVER=0x0600")
 

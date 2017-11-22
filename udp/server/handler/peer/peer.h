@@ -26,8 +26,7 @@ struct peer
     peer_t p_seq;
     char* p_username; // null-terminated
     char p_mode;
-    int p_cwd;
-    char* p_cwdpath; // null-terminated
+    char* p_cwd; // null-terminated
 };
 
 int
@@ -56,5 +55,8 @@ peer_destroy(struct peer* p);
 
 int
 peer_check_order(struct peer* p, unsigned int seq);
+
+int
+peer_relative_path(struct peer* p, const char* path, char** resolved);
 
 #endif

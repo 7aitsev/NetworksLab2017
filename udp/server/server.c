@@ -1,3 +1,4 @@
+#include "lib/werror.h"
 #include "logger/logger.h"
 #include "server/handler/handler.h"
 #include "server/server.h"
@@ -19,19 +20,6 @@ struct serverdata
 
 static struct serverdata this;
 
-char*
-error()
-{
-    static char buf[1024];
-    if(0 != FormatMessage(
-        FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
-        NULL, GetLastError(), 0, buf, 1024, NULL))
-    {
-        sprintf(buf, "FormatMessage() failed: err=0x%lx\n", GetLastError());
-    }
-    return buf;
-}
-
 static int
 trybind(struct addrinfo* servinfo)
 {
@@ -49,7 +37,7 @@ trybind(struct addrinfo* servinfo)
         if(0 != setsockopt(this.master, SOL_SOCKET, SO_REUSEADDR,
             (char*) &yes, sizeof(yes)))
         {
-            logger_log("[server] setsockopt: %s\n", error());
+            logger_log("[server] setsockopt: %s\n", wstrerror());
             return -1;
         }
 
@@ -63,7 +51,7 @@ trybind(struct addrinfo* servinfo)
 
     if(NULL == p)
     {
-        logger_log("[server] Could not bind: %s\n", error());
+        logger_log("[server] Could not bind: %s\n", wstrerror());
         return -1;
     }
 
@@ -80,7 +68,7 @@ server_init(const char* host, const char* port)
 
     WSADATA wsaData;
     if(0 != WSAStartup(MAKEWORD(2,2), &wsaData)) {
-        logger_log("WSAStartup() failed: %s\n", error());
+        logger_log("WSAStartup() failed: %s\n", wstrerror());
         return -1;
     }
 
@@ -131,7 +119,7 @@ handle_master_socket(WSAEVENT event)
             logger_log("[server] was sent %d bytes\n", bytes);
             if(-1 == bytes)
             {
-                logger_log("[server] sento() failed: %s\n", error());
+                logger_log("[server] sento() failed: %s\n", wstrerror());
                 this.is_running = 0;
             }
         }
@@ -142,7 +130,7 @@ handle_master_socket(WSAEVENT event)
     }
     else
     {
-        logger_log("[server] recvfrom failed: %s\n", error());
+        logger_log("[server] recvfrom failed: %s\n", wstrerror());
         this.is_running = 0;
     }
 }

@@ -1,3 +1,4 @@
+#include "lib/werror.h"
 #include "logger/logger.h"
 #include "server/handler/peer/peer.h"
 
@@ -34,7 +35,7 @@ peer_printinfo(struct peer* p)
     if(PEER_NO_PERMS != p->p_mode)
     {
         printf("\tUsername: %s\n\tCWD: %s\n\tMode: %d\n",
-                p->p_username, p->p_cwdpath, p->p_mode);
+                p->p_username, p->p_cwd, p->p_mode);
     }
     else
     {
@@ -80,9 +81,7 @@ peer_cpy_addr(struct peer* p, struct sockaddr_in* addr)
 void
 peer_destroy(struct peer* p)
 {
-    // close file p_cwd
-    free(p->p_username);
-    free(p->p_cwdpath);
+    free(p->p_username); // this also frees p_cwd
     memset(p, 0, sizeof(struct peer));
 }
 
@@ -90,4 +89,37 @@ int
 peer_check_order(struct peer* p, unsigned int seq)
 {
     return (p->p_seq < seq) ? 0 : -1;
+}
+
+int
+peer_relative_path(struct peer* p, const char* path, char** resolved)
+{
+    int resolved_path_size;
+    char* buf = NULL;
+
+    if('\\' != path[0] && ':' != path[1])
+    {
+        int from_str_size =
+                strlen(p->p_cwd) + strlen(path) + strlen("\\0");
+        buf = malloc(from_str_size);
+        sprintf(buf, "%s\\%s", p->p_cwd, path);
+        path = buf;
+    }
+    
+    resolved_path_size = GetFullPathName(path, 0, NULL, NULL);
+    if(! resolved_path_size)
+    {
+        logger_log("[peer] GetFullPathName failed for \"%s\": %s\n",
+                path, wstrerror());
+        free(buf);
+        return resolved_path_size;
+    }
+
+    *resolved = malloc(resolved_path_size);
+    GetFullPathName(path, resolved_path_size, *resolved, NULL);
+
+    logger_log("[peer] resolved path=%s\n", *resolved);
+
+    free(buf);
+    return resolved_path_size;
 }

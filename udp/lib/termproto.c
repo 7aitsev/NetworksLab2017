@@ -71,7 +71,7 @@ term_parse_req(struct term_req* req, const char* buf)
 
     errno = 0;
     req->seq = 0;
-    int rv = sscanf(buf, "%u %7[A-Z] %255s",
+    int rv = sscanf(buf, "%u %7[A-Z] %255[^\r\n]",
                     &req->seq, method, req->path);
     if(3 == rv)
     {
