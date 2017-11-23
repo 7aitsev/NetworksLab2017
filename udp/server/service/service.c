@@ -39,7 +39,7 @@ small_resp()
         g_req.status);
     if(MSG_EMPTY != g_req.msg)
     {
-        respsize += sprintf(g_buf + respsize, "%s\r\n", g_req.msg);
+        respsize += sprintf(g_buf + respsize, "\r\n%s", g_req.msg);
     }
     g_bytes_to_send = respsize;
 }
@@ -54,7 +54,7 @@ find_in_db(FILE* fdb, const char* login, const char* pass)
     while(3 == fscanf(fdb, "%10s %10s %c", l, p, &mode))
     {
         if(0 == strcmp(login, l) && 0 == strcmp(pass, p))
-            return mode;
+            return mode - '0';
     }
 
     return PEER_NO_PERMS;
@@ -174,6 +174,7 @@ do_ls()
 
     g_req.status = OK;
     n = term_put_header(g_buf, g_bufsize, g_peer->p_seq, g_req.status);
+    n += sprintf(g_buf + n, "\r\n");
     while(NULL != (entry = readdir(dir)))
     {
         if(entry->d_name[0] != '.')
@@ -220,7 +221,7 @@ do_who()
     int peers_cnt = 0;
 
     n = term_put_header(g_buf, g_bufsize, g_peer->p_seq, g_req.status = OK);
-    n += sprintf(g_buf + n, "ID\tUNAME\tMODE\tCWD\n");
+    n += sprintf(g_buf + n, "\r\nID\tUNAME\tMODE\tCWD\n");
     handler_foreach(lambda(void, (struct peer* pp)
     {
         if(0 != pp->p_mode)
