@@ -1,6 +1,12 @@
 #include "termproto.h"
-#include "logger/logger.h"
 
+#ifdef __linux__
+void logger_log(char* phony, ...) { *phony = 0; }
+#else
+#include "logger/logger.h"
+#endif
+
+#include <ctype.h>
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -71,7 +77,7 @@ term_parse_req(struct term_req* req, const char* buf)
 
     errno = 0;
     req->seq = 0;
-    int rv = sscanf(buf, "%u %7[A-Z] %255[^\r\n]",
+    int rv = sscanf(buf, "%hu %7[A-Z] %255[^\r\n]",
                     &req->seq, method, req->path);
     if(3 == rv)
     {
@@ -111,14 +117,34 @@ term_put_header(char* buf, int bufsize, unsigned int seq,
         TERM_STATUS_ALL[status], TERM_STATUS_ALL[status + 1]);
     return (n < bufsize) ? n : bufsize;
 }
-/*
-size_t
-term_mk_req_header(struct term_req* req, char* buf, size_t bufsize)
+
+int
+term_mk_req_header(struct term_req* req, char* buf, int bufsize)
 {
-    size_t n;
-    n = snprintf(buf, bufsize, "%s %s\r\n",
+    int n = snprintf(buf, bufsize, "%hd %s %s\r\n", req->seq,
             TERM_METHOD_STRING[req->method], req->path);
     return (n < bufsize) ? n : bufsize;
+}
+
+static char*
+find_msg(const char* p)
+{
+    int cnt = 0;
+    int limit = 2 * TERMPROTO_PATH_SIZE;
+    while(*p != '\0' && cnt++ < limit)
+    {
+        if(*p == '\n')
+        {
+            while(*p != '\0' && cnt++ < limit)
+            {
+                if(! isspace((unsigned int) *p++))
+                    return (char*) --p;
+            }
+            return NULL;
+        }
+        ++p;
+    }
+    return NULL;
 }
 
 int
@@ -129,14 +155,15 @@ term_parse_resp_status(struct term_req* req, char* buf)
     char status_txt[22];
     status_txt[0] = '\0';
     
-    rv = sscanf(buf, "%3s %21s", status, status_txt);
-    if(2 <= rv)
+    rv = sscanf(buf, "%hu %3s %21[^\r\n]", &req->seq, status, status_txt);
+    if(3 == rv)
     {
         int s = term_is_valid_status(status);
         if(-1 == s)
             return s;
         req->status = s;
         strncpy(req->path, status_txt, 22);
+        req->msg = find_msg(buf);
     }
     else
     {
@@ -144,13 +171,3 @@ term_parse_resp_status(struct term_req* req, char* buf)
     }
     return 0;
 }
-
-int
-term_parse_resp_body(char* buf)
-{
-    int rv;
-    int len;
-    
-    rv = sscanf(buf, "LENGTH: %d", &len);
-    return (1 == rv) ? len : -1;
-}*/

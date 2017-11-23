@@ -20,7 +20,7 @@ enum TERM_STATUS {
 };
 
 struct term_req {
-    unsigned int seq;
+    unsigned short int seq;
     enum TERM_METHOD method;
     char path[TERMPROTO_PATH_SIZE];
     enum TERM_STATUS status;
@@ -43,14 +43,11 @@ term_parse_req(struct term_req* req, const char* buf);
 int
 term_put_header(char* buf, int bufsize, unsigned int seq,
     enum TERM_STATUS status);
-/*
+
 int
 term_mk_req_header(struct term_req* req, char* buf, int bufsize);
 
 int
 term_parse_resp_status(struct term_req* req, char* buf);
 
-int
-term_parse_resp_body(char* buf);
-*/
 #endif
