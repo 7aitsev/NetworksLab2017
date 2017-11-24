@@ -6,12 +6,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/select.h>
 #include <sys/socket.h>
 #include <unistd.h>
 
 static int g_sfd;
-
-static unsigned short int g_seq;
 static struct term_req g_req;
 static char g_running = 0;
 static int g_len;
@@ -210,9 +209,10 @@ print_bad_resp()
 void
 send_req()
 {
+    static unsigned short int seq = 0;
     size_t n;
 
-    g_req.seq = ++g_seq;
+    g_req.seq = ++seq;
     n = term_mk_req_header(&g_req, g_buf, g_bufsize);
     if(-1 == send(g_sfd, g_buf, n, MSG_NOSIGNAL))
     {
@@ -229,7 +229,6 @@ print_resp_body()
 void
 wait_resp()
 {
-    //select...
     g_len = recv(g_sfd, g_buf, g_bufsize, 0);
     if(-1 == g_len)
     {
@@ -276,7 +275,7 @@ recv_resp()
     }
     else
     {
-        error("Received bad response.\n", 0, NULL);
+        error("Received bad response", 0, NULL);
     }
 }
 
@@ -387,21 +386,66 @@ runclient()
     size_t cmdlen;
     enum {CMDBUFSIZE = 300};
     char cmdbuf[CMDBUFSIZE];
-
-    g_running = 1;
+    fd_set allfd;
+    fd_set readfd;
+    struct timeval tv;
+    unsigned char heartbeats = 0;
 
     authenticate();
 
+    FD_ZERO(&allfd);
+    FD_SET(STDIN_FILENO, &allfd);
+    FD_SET(g_sfd, &allfd);
+    tv.tv_sec = TERMPROTO_T1;
+    tv.tv_usec = 0;
+
+    g_running = 1;
+    print_prompt();
     while(g_running)
     {
-        print_prompt();
-        cmdlen = read_cmd(cmdbuf, CMDBUFSIZE);
-        if(0 == cmdlen)
-            continue;
-        if(-1 == parse_cmd(cmdbuf))
-            continue;
-
-        handle_cmd();
+        readfd = allfd;
+        int rc = select(g_sfd + 1, &readfd, NULL, NULL, &tv);
+        if(rc > 0)
+        {
+            if(FD_ISSET(STDIN_FILENO, &readfd))
+            {
+                cmdlen = read_cmd(cmdbuf, CMDBUFSIZE);
+                if(0 == cmdlen)
+                {
+                    print_prompt();
+                    continue;
+                }
+                if(-1 == parse_cmd(cmdbuf))
+                {
+                    print_prompt();
+                    continue;
+                }
+                send_req();
+            }
+            else if(FD_ISSET(g_sfd, &readfd))
+            {
+                recv_resp();
+                print_prompt();
+                heartbeats = 0;
+                tv.tv_sec = TERMPROTO_T1;
+            }
+            else
+            {
+                error("select returned invalid socket", g_sfd, exit);
+            }
+        }
+        else if(0 == rc)
+        {
+            if(++heartbeats > 3)
+                error("connection dead", g_sfd, exit);
+            if(-1 == send(g_sfd, NULL, 0, 0))
+                error("send failure", g_sfd, exit);
+            tv.tv_sec = TERMPROTO_T2;
+        }
+        else
+        {
+            error("select failure", g_sfd, exit);
+        }
     }
 
     close(g_sfd);
