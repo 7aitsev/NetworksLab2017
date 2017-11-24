@@ -18,7 +18,13 @@ void
 handler_destroy();
 
 int
-handler_new(char* buf, int bufsize, struct sockaddr_storage* addr);
+handler_new_request(struct sockaddr_storage* addr);
+
+void
+handler_touch_peer(struct sockaddr_storage* addr);
+
+void
+handler_remove_expired();
 
 peer_t
 handler_getcurrent();
@@ -42,8 +48,5 @@ handler_find_first_and_apply(int (*predicate)(struct peer* ppeer),
 int
 handler_find_all_and_apply(int (*predicate)(struct peer* ppeer),
         void (*consumer)(struct peer* ppeer));
-/*
-void
-handler_perform(struct peer* subj, void (*consumer)(struct peer* p));
-*/
+
 #endif

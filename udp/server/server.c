@@ -8,6 +8,11 @@
 #include <string.h>
 #include <winsock2.h>
 
+/* from "service" module */
+extern const int g_period; // determines by protocol
+extern char* g_buf; // is going to be allocated in server_init()
+extern const int g_bufsize; // determines by protocol
+
 struct serverdata
 {
     const char* host;
@@ -90,6 +95,7 @@ server_init(const char* host, const char* port)
     if(0 == rv && -1 == terminal_run(server_stop))
         return -1;
 
+    g_buf = malloc(g_bufsize);
     return rv;
 }
 
@@ -97,24 +103,22 @@ void
 handle_master_socket(WSAEVENT event)
 {
     static int bytes;
-    static const int bufsize = 1024;
-    static char buf[1024];
     static WSANETWORKEVENTS network_events;
     static struct sockaddr_storage sa_peer;
     static socklen_t sa_peer_len = sizeof(sa_peer);
     
     WSAEnumNetworkEvents(this.master, event, &network_events);
-    bytes = recvfrom(this.master, buf, sizeof(buf), 0,
+    bytes = recvfrom(this.master, g_buf, g_bufsize, 0,
                      (struct sockaddr*) &sa_peer, &sa_peer_len);
     if(0 < bytes)
     {
-        buf[bytes] = '\0';
+        g_buf[bytes] = '\0';
 
-        if(0 < (bytes = handler_new(buf, bufsize, &sa_peer)))
+        logger_log("[server] received \"%s\"\n", g_buf);
+        if(0 < (bytes = handler_new_request(&sa_peer)))
         {
-            bytes = sendto(this.master, buf, bytes, 0,
+            bytes = sendto(this.master, g_buf, bytes, 0,
                            (struct sockaddr*) &sa_peer, sa_peer_len);
-            logger_log("[server] was sent %d bytes\n", bytes);
             if(-1 == bytes)
             {
                 logger_log("[server] sento() failed: %s\n", wstrerror());
@@ -124,7 +128,13 @@ handle_master_socket(WSAEVENT event)
     }
     else if(0 == bytes)
     {
-        //keep alive
+        handler_touch_peer(&sa_peer);
+        if(-1 == sendto(this.master, NULL, 0, 0,
+                (struct sockaddr*) &sa_peer, sa_peer_len))
+        {
+            logger_log("sendto failed while sending heart beat\n");
+            this.is_running = 0;
+        }
     }
     else
     {
@@ -144,11 +154,12 @@ server_run()
     this.is_running = 1;
     while(this.is_running)
     {
-        DWORD result = WSAWaitForMultipleEvents(2, events, FALSE, 5000, FALSE);
+        DWORD result =
+            WSAWaitForMultipleEvents(2, events, FALSE, g_period, FALSE);
         switch(result)
         {
             case WAIT_TIMEOUT:
-                // send keep alive messages to all pears, make cleanup of expired ones
+                handler_remove_expired();
                 break;
             case WAIT_OBJECT_0:
                 handle_master_socket(events[0]);
@@ -174,6 +185,7 @@ server_stop()
 {
     this.is_running = 0;
     closesocket(this.master);
+    free(g_buf);
 }
 
 void

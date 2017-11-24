@@ -18,10 +18,13 @@ static const char * const AUTH_BAD_TRY = "Unable to log in";
 static const char * const AUTH_GRANTED = "Successful authentication";
 
 char* g_buf;
-int g_bufsize;
+const int g_bufsize = TERMPROTO_BUF_SIZE;
+const int g_period  = (1000 * (TERMPROTO_T1 + TERMPROTO_T2));
 struct peer* g_peer;
-int g_bytes_to_send;
-struct term_req g_req;
+LARGE_INTEGER g_frequency;
+
+static int g_bytes_to_send;
+static struct term_req g_req;
 
 static void
 error_term()
@@ -329,15 +332,33 @@ handle_req()
     }
 }
 
-int
-service(char* buf, int bufsize, struct peer* p)
+long long milliseconds_now()
 {
-    g_buf = buf;
-    g_bufsize = bufsize;
+    static LARGE_INTEGER now;
+    QueryPerformanceCounter(&now);
+    return (1000LL * now.QuadPart) / g_frequency.QuadPart;
+}
+
+void
+service_extend_time(struct peer* p)
+{
+    p->p_time = milliseconds_now() + g_period;
+}
+
+int
+service_is_peer_expired(struct peer* p)
+{
+    return peer_is_exist(p)
+            && (milliseconds_now() - p->p_time >= g_period);
+}
+
+int
+service(struct peer* p)
+{
     g_peer = p;
     g_req.msg = MSG_EMPTY;
 
-    int rv = term_parse_req(&g_req, buf);
+    int rv = term_parse_req(&g_req, g_buf);
 
     if(0 != g_req.seq) // successfully parsed seq number
     {
@@ -366,5 +387,6 @@ service(char* buf, int bufsize, struct peer* p)
     }
 
     logger_log("[service] parsed=%d, to send %d\n", rv, g_bytes_to_send);
+    service_extend_time(p);
     return g_bytes_to_send;
 }

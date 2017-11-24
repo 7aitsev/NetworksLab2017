@@ -22,6 +22,7 @@ struct peer
     /* cached parameters */
     char p_ipstr[INET_ADDRSTRLEN];
     unsigned short int p_port;
+    long long p_time;
 
     peer_t p_seq;
     char* p_username; // null-terminated
@@ -46,9 +47,6 @@ peer_is_exist(struct peer* p);
 
 int
 peer_is_not_exist(struct peer* p);
-
-void
-peer_cpy_addr(struct peer* p, struct sockaddr_in* addr);
 
 void
 peer_destroy(struct peer* p);

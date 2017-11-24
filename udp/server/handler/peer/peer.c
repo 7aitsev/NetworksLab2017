@@ -73,12 +73,6 @@ peer_is_not_exist(struct peer* p)
 }
 
 void
-peer_cpy_addr(struct peer* p, struct sockaddr_in* addr)
-{
-    memcpy(&p->p_addr, addr, sizeof(struct sockaddr_in));
-}
-
-void
 peer_destroy(struct peer* p)
 {
     free(p->p_username); // this also frees p_cwd

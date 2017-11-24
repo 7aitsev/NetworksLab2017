@@ -4,6 +4,12 @@
 #include "server/handler/peer/peer.h"
 
 int
-service(char* buf, int bufsize, struct peer* p);
+service(struct peer* p);
+
+void
+service_extend_time(struct peer* p);
+
+int
+service_is_peer_expired(struct peer* p);
 
 #endif

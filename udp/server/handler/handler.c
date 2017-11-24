@@ -17,6 +17,10 @@ static peer_t g_total;
 static peer_t g_peerslen;
 static struct peer* g_peers;
 
+/* from "service" module */
+extern LARGE_INTEGER g_frequency;
+extern struct peer* g_peer;
+
 void
 handler_init()
 {
@@ -24,6 +28,7 @@ handler_init()
     g_peerslen = HANDLER_PEERS_SIZE;
     g_peers = malloc(g_peerslen * sizeof(struct peer));
     memset(g_peers, 0, g_peerslen * sizeof(struct peer));
+    QueryPerformanceFrequency(&g_frequency);
 }
 
 void
@@ -46,18 +51,26 @@ handler_gettotal()
     return g_total;
 }
 
-struct peer*
-get_peer_from_array(struct sockaddr_in* addr)
+static int
+get_peer_from_array(struct sockaddr_storage* addr, struct peer** out_peer)
 {
+    if(-1 == peer_check_family(addr))
+    {
+        logger_log("[server] unsupported adress family: %d\n",
+                addr->ss_family);
+        return -1;
+    }
+
     const struct peer* peers_end = g_peers + g_peerslen;
     for(struct peer* p = g_peers; peers_end != p; ++p)
     {
-        if(peer_are_addrs_equal(&p->p_addr, addr))
+        if(peer_are_addrs_equal(&p->p_addr, (struct sockaddr_in*) addr))
         {
-            return p;
+            *out_peer = p;
+            return 1;
         }
     }
-    return NULL;
+    return 0;
 }
 
 int
@@ -93,26 +106,13 @@ handler_find_all_and_apply(int (*predicate)(struct peer* ppeer),
     return wasfound;
 }
 
-/**
- * -1 - no action required
- *  0 - a response has to be sent
- */
 int
-handler_new(char* buf, int bufsize, struct sockaddr_storage* addr)
+handler_new_request(struct sockaddr_storage* addr)
 {
     struct peer* _peer;
-    struct sockaddr_in* peer_addr;
 
-    if(-1 == peer_check_family(addr))
-    {
-        logger_log("[server] unsupported adress family: %d\n",
-                addr->ss_family);
-        return -1;
-    }
-
-    peer_addr = (struct sockaddr_in*) addr;
-    _peer = get_peer_from_array(peer_addr);
-    if(NULL == _peer) // new peer
+    int rv = get_peer_from_array(addr, &_peer);
+    if(0 == rv) // new peer
     {
         logger_log("[handler] adding peer...\n");
         int was_found = handler_find_first_and_apply(
@@ -121,7 +121,8 @@ handler_new(char* buf, int bufsize, struct sockaddr_storage* addr)
             {
                 ++g_current;
                 p->p_id = ++g_total;
-                peer_cpy_addr(p, peer_addr);
+                memcpy(&p->p_addr, (struct sockaddr_in*) addr,
+                    sizeof(struct sockaddr_in));
                 logger_log("[handler] peer was added to the array\n");
                 _peer = p;
             })
@@ -133,10 +134,24 @@ handler_new(char* buf, int bufsize, struct sockaddr_storage* addr)
             return -1;
         }
     }
+    else if(-1 == rv)
+    {
+        return rv;
+    }
 
-    logger_log("[handler] received \"%s\"\n", buf);
     // a response is going to be in the buffer
-    return service(buf, bufsize, _peer); // return how many bytes to send
+    return service(_peer); // return how many bytes to send
+}
+
+void
+handler_touch_peer(struct sockaddr_storage* addr)
+{
+    struct peer* _peer;
+
+    if(get_peer_from_array(addr, &_peer))
+    {
+        service_extend_time(_peer);
+    }
 }
 
 static void
@@ -148,6 +163,12 @@ deletepeer(struct peer* p)
 
     --g_current;
     peer_destroy(p);
+}
+
+void
+handler_remove_expired()
+{
+    handler_delete_all_if(service_is_peer_expired);
 }
 
 int
