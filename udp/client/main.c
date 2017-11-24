@@ -40,11 +40,11 @@ error(const char *err_msg, const int socket, void (*exit)(int))
 {
     if(0 != errno)
     {
-        fprintf(stderr, "%s: %s\n", err_msg, strerror(errno));
+        fprintf(stderr, "\n\n%s: %s\n", err_msg, strerror(errno));
     }
     else
     {
-        fprintf(stderr, "%s\n", err_msg);
+        fprintf(stderr, "\n\n%s\n", err_msg);
     }
 
     if(0 != socket)
@@ -227,22 +227,21 @@ print_resp_body()
 }
 
 void
-wait_resp()
+recv_resp()
 {
+    int rv;
+
     g_len = recv(g_sfd, g_buf, g_bufsize, 0);
     if(-1 == g_len)
     {
         error("recv failed", g_sfd, exit);
     }
+    else if(0 == g_len)
+    {
+        return;
+    }
     g_buf[(g_bufsize == g_len) ? g_len - 1 : g_len] = '\0';
-}
 
-void
-recv_resp()
-{
-    int rv;
-
-    wait_resp();
     if(0 == (rv = term_parse_resp_status(&g_req, g_buf)))
     {
         if(OK == g_req.status)
@@ -277,6 +276,7 @@ recv_resp()
     {
         error("Received bad response", 0, NULL);
     }
+    print_prompt();
 }
 
 void
@@ -400,7 +400,6 @@ runclient()
     tv.tv_usec = 0;
 
     g_running = 1;
-    print_prompt();
     while(g_running)
     {
         readfd = allfd;
@@ -425,7 +424,6 @@ runclient()
             else if(FD_ISSET(g_sfd, &readfd))
             {
                 recv_resp();
-                print_prompt();
                 heartbeats = 0;
                 tv.tv_sec = TERMPROTO_T1;
             }
