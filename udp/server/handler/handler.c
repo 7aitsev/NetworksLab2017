@@ -143,7 +143,7 @@ handler_new_request(struct sockaddr_storage* addr)
     return service(_peer); // return how many bytes to send
 }
 
-void
+int
 handler_touch_peer(struct sockaddr_storage* addr)
 {
     struct peer* _peer;
@@ -151,7 +151,9 @@ handler_touch_peer(struct sockaddr_storage* addr)
     if(get_peer_from_array(addr, &_peer))
     {
         service_extend_time(_peer);
+        return 0;
     }
+    else return -1;
 }
 
 static void

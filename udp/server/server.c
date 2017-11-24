@@ -128,12 +128,14 @@ handle_master_socket(WSAEVENT event)
     }
     else if(0 == bytes)
     {
-        handler_touch_peer(&sa_peer);
-        if(-1 == sendto(this.master, NULL, 0, 0,
-                (struct sockaddr*) &sa_peer, sa_peer_len))
+        if(0 == handler_touch_peer(&sa_peer))
         {
-            logger_log("sendto failed while sending heart beat\n");
-            this.is_running = 0;
+            if(-1 == sendto(this.master, NULL, 0, 0,
+                    (struct sockaddr*) &sa_peer, sa_peer_len))
+            {
+                logger_log("sendto failed while sending heart beat\n");
+                this.is_running = 0;
+            }
         }
     }
     else

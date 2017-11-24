@@ -20,7 +20,7 @@ handler_destroy();
 int
 handler_new_request(struct sockaddr_storage* addr);
 
-void
+int
 handler_touch_peer(struct sockaddr_storage* addr);
 
 void
