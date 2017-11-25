@@ -105,22 +105,22 @@ term_parse_req(struct term_req* req, const char* buf)
     return -1;
 }
 
-size_t
-term_put_header(char* buf, size_t bufsize, enum TERM_STATUS status,
-        size_t size)
+msgsize_t
+term_put_header(char* buf, msgsize_t bufsize, enum TERM_STATUS status,
+        msgsize_t size)
 {
-    size_t n;
-    n = snprintf(buf, bufsize, "%s %s\r\n", TERM_STATUS_ALL[status],
-            TERM_STATUS_ALL[status + 1]);
-    if(0 < size && n < bufsize)
+    msgsize_t n = snprintf(buf, bufsize, "%hd %s %s\r\n",
+            size, TERM_STATUS_ALL[status], TERM_STATUS_ALL[status + 1]);
+    if(0 < size && (msgsize_t) n + 2 < bufsize)
     {
-        n += snprintf(buf + n, bufsize - n, "LENGTH: %ld\r\n\r\n", size);
+        strcat(buf, "\r\n");
+        n += 2;
     }
-    return (n < bufsize) ? n : bufsize;
+    return n;
 }
 
 size_t
-term_mk_req_header(struct term_req* req, char* buf, size_t bufsize)
+term_mk_req_header(struct term_req* req, char* buf, msgsize_t bufsize)
 {
     size_t n;
     n = snprintf(buf, bufsize, "%s %s\r\n",
@@ -132,12 +132,13 @@ int
 term_parse_resp_status(struct term_req* req, char* buf)
 {
     int rv;
+    msgsize_t size;
     char status[4];
     char status_txt[22];
     status_txt[0] = '\0';
     
-    rv = sscanf(buf, "%3s %21s", status, status_txt);
-    if(2 <= rv)
+    rv = sscanf(buf, "%hd %3s %21[^\r\n]", &size, status, status_txt);
+    if(3 <= rv)
     {
         int s = term_is_valid_status(status);
         if(-1 == s)
@@ -150,14 +151,4 @@ term_parse_resp_status(struct term_req* req, char* buf)
         return -1;
     }
     return 0;
-}
-
-int
-term_parse_resp_body(char* buf)
-{
-    int rv;
-    int len;
-    
-    rv = sscanf(buf, "LENGTH: %d", &len);
-    return (1 == rv) ? len : -1;
 }

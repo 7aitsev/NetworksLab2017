@@ -38,9 +38,8 @@ static void
 small_resp(struct peer* p, struct term_req* req)
 {
     size_t respsize;
-    size_t bodylen = strlen(req->msg);
+    msgsize_t bodylen = strlen(req->msg);
 
-    bodylen += (bodylen > 0) ? 2 : 0;
     respsize = term_put_header(p->p_buffer, p->p_buflen, req->status,
             bodylen);
     if(MSG_EMPTY != req->msg)
@@ -201,7 +200,9 @@ count_names_len(int fdcwd, struct term_req* req)
 static void
 do_ls(struct peer* p, struct term_req* req)
 {
-    struct dirent* entry;
+    size_t n = 0;
+    msgsize_t bs = p->p_buflen;
+    char* buf = p->p_buffer;
     DIR* root;
     int fdcwd;
 
@@ -211,39 +212,41 @@ do_ls(struct peer* p, struct term_req* req)
     }));
 
     int cnt = count_names_len(fdcwd, req);
-    if(-1 == cnt)
+    if(0 > cnt)
     {
         error_term(p->p_sfd, req);
         logger_log("[service] cant read a dir: %s\n", strerror(errno));
         return;
     }
-
-    size_t n = 0;
-    size_t prev;
-    char* buf = p->p_buffer;
-    size_t bs = p->p_buflen;
-
+    
     n = term_put_header(buf, bs, req->status, cnt);
-    root = fdopendir(openat(fdcwd, req->path, O_RDONLY)); // so-so
-    while(NULL != (entry = readdir(root)))
+    if(0 < cnt)
     {
-        if(entry->d_name[0] != '.')
+        msgsize_t prev;
+        struct dirent* entry;
+
+        root = fdopendir(openat(fdcwd, req->path, O_RDONLY));
+        while(NULL != (entry = readdir(root)))
         {
-            prev = n;
-            n += snprintf(buf + n, bs - n, "%s%s\r\n", entry->d_name,
-                    (DT_DIR == entry->d_type) ? "/" : "");
-            if(n >= bs)
+            if(entry->d_name[0] != '.')
             {
-                size_t tosend = prev;
-                sendall(p->p_sfd, buf, &tosend);
-                prev = 0;
-                n = sprintf(buf, "%s%s\r\n", entry->d_name,
-                    (DT_DIR == entry->d_type) ? "/" : "");
+                prev = n;
+                n += snprintf(buf + n, bs - n, "%s%s\r\n", entry->d_name,
+                        (DT_DIR == entry->d_type) ? "/" : "");
+                if(n >= bs)
+                {
+                    size_t tosend = prev;
+                    sendall(p->p_sfd, buf, &tosend);
+                    prev = 0;
+                    n = sprintf(buf, "%s%s\r\n", entry->d_name,
+                        (DT_DIR == entry->d_type) ? "/" : "");
+                }
             }
         }
+        closedir(root);
     }
+
     sendall(p->p_sfd, buf, &n);
-    closedir(root);
 }
 
 static void
@@ -315,10 +318,10 @@ do_kill(struct peer* p, struct term_req* req)
 static void
 do_who(struct peer* p, struct term_req* req)
 {
-    size_t n;
+    msgsize_t n;
+    msgsize_t offset;
     size_t tocpy;
     size_t tosend;
-    size_t offset;
     int peers_cnt = 0;
     int bsize = 6 * TERMPROTO_BUF_SIZE; // big enough for 20 peers
     char* buf = malloc(bsize);
@@ -452,7 +455,6 @@ service(struct peer* p)
 
         while(1)
         {
-            memset(buffer, 0, len);
             int rv = readcrlf(sfd, buffer, len);
             if(0 < rv)
             {
