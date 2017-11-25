@@ -248,7 +248,10 @@ recv_resp()
     if(0 == (rv = term_parse_resp_status(&g_req, g_buf)))
     {
         if(g_req.seq != g_seq)
+        {
+            puts("Received unordered message");
             return;
+        }
 
         if(OK == g_req.status)
         {
@@ -354,7 +357,7 @@ read_cmd(char* buf, int bufsize)
 {
     int buflen;
     *buf = '\0';
-    // select...
+
     if(NULL == fgets(buf, bufsize, stdin))
     {
         perror("fgets() failed while reading stdin");
@@ -441,7 +444,7 @@ runclient()
         else if(0 == rc)
         {
             if(++heartbeats > 3)
-                error("connection dead", g_sfd, exit);
+                error("Connection dead", g_sfd, exit);
             if(-1 == send(g_sfd, NULL, 0, 0))
                 error("send failure", g_sfd, exit);
             tv.tv_sec = TERMPROTO_T2;
