@@ -11,6 +11,7 @@
 #include <unistd.h>
 
 static int g_sfd;
+static unsigned short int g_seq;
 static struct term_req g_req;
 static char g_running = 0;
 static int g_len;
@@ -209,10 +210,9 @@ print_bad_resp()
 void
 send_req()
 {
-    static unsigned short int seq = 0;
     size_t n;
 
-    g_req.seq = ++seq;
+    g_req.seq = ++g_seq;
     n = term_mk_req_header(&g_req, g_buf, g_bufsize);
     if(-1 == send(g_sfd, g_buf, n, MSG_NOSIGNAL))
     {
@@ -223,7 +223,10 @@ send_req()
 void
 print_resp_body()
 {
-    puts(g_req.msg);
+    if(NULL != g_req.msg)
+        puts(g_req.msg);
+    else
+        putchar('\n');
 }
 
 void
@@ -244,6 +247,9 @@ recv_resp()
 
     if(0 == (rv = term_parse_resp_status(&g_req, g_buf)))
     {
+        if(g_req.seq != g_seq)
+            return;
+
         if(OK == g_req.status)
         {
             switch(g_req.method)
