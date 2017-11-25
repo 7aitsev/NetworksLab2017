@@ -10,33 +10,41 @@
 #endif
 
 int
-readcrlf(SOCKET sfd, char *buf, size_t bsize)
+readcrlf(SOCKET sfd, char* buf, size_t bsize)
 {
-    char *p = buf;
-    size_t len = bsize;
     int rc;
-    char c;
-    char lastc = 0;
+    int cnt = 0;
+    char lastc = '\0';
 
-    while(len > 0)
+    int len = bsize >> 1;
+    while(0 < len)
     {
-        if(1 != (rc = recv(sfd, &c, 1, 0)))
+        rc = recv(sfd, buf, len, MSG_PEEK);
+        if(0 < rc)
+        {
+            char* p = buf;
+            len -= rc;
+            while(0 < rc--)
+            {
+                ++cnt;
+                if('\n' == *p)
+                {
+                    char cr = 0;
+                    if('\r' == lastc)
+                        cr = 1;
+                    rc = recv(sfd, buf, cnt, 0);
+                    buf[--cnt - cr] = '\0';
+                    return rc - cr;
+                }
+                lastc = *p++;
+            }
+        }
+        else
         {
             if(0 > rc && EINTR == errno)
                 continue;
             return rc;
         }
-        if('\n' == c)
-        {
-            if('\r' == lastc)
-                p--;
-            *p = '\0';
-            return p - buf + 1;
-        }
-
-        *p++ = c;
-        lastc = c;
-        len--;
     }
     errno = EMSGSIZE;
     return -1;
