@@ -18,13 +18,13 @@ main(int argc, char** argv)
     {
         logger_log("[main] starting the server...\n");
         server_run();
+        server_join();
     }
     else
     {
         logger_log("[main] server has not started\n");
     }
 
-    server_join();
     logger_log("[main] server has shut down\n");
     logger_destroy();
 

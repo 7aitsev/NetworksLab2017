@@ -59,7 +59,6 @@ trybind(struct addrinfo* servinfo)
         return -1;
     }
 
-    freeaddrinfo(servinfo);
     return sfd;
 }
 
@@ -86,7 +85,9 @@ server_prepare(const char* host, const char* port)
         return -1;
     }
 
-    if(0 <= (rv = trybind(servinfo)))
+    rv = trybind(servinfo);
+    freeaddrinfo(servinfo);
+    if(0 <= rv)
     {
         if(-1 == listen(rv, SERVER_BACKLOG))
         {
