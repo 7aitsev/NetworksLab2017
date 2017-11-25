@@ -145,10 +145,7 @@ term_parse_resp_status(struct term_req* req, char* buf)
             return s;
         req->status = s;
         strncpy(req->path, status_txt, 22);
+        return size;
     }
-    else
-    {
-        return -1;
-    }
-    return 0;
+    return -1;
 }

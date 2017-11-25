@@ -292,43 +292,22 @@ read_resp_line()
     return rv;
 }
 
-size_t
+void
 seek_to_resp_body()
 {
-    int rv;
-    size_t len;
-
-    rv = read_resp_line(g_sfd, g_buf, g_bufsize);
-
-    if(0 == rv)
-    {
-        error("Unexpected empty line in the response", NULL, exit);
-    }
-
-    rv = term_parse_resp_body(g_buf);
-    if(-1 == rv)
-    {
-        error("Bad response format", NULL, exit);
-    }
-    len = rv;
-
-    rv = read_resp_line(g_sfd, g_buf, g_bufsize);
-    if(0 != rv)
+    if(0 != read_resp_line(g_sfd, g_buf, g_bufsize))
     {
         error("The response could not be read: bad format", NULL, exit);
     }
-    return len;
 }
 
 void
-print_resp_body()
+print_resp_body(msgsize_t size)
 {
     int rv;
     size_t left, toread;
 
-    rv = seek_to_resp_body();
-
-    left = rv;
+    left = size;
     while(left > 0)
     {
         toread = (left < g_bufsize) ? left : g_bufsize - 1;
@@ -352,21 +331,21 @@ print_resp_body()
 }
 
 void
-cp_resp_body()
+cp_resp_body(msgsize_t size)
 {
-    size_t rv;
-
-    rv = seek_to_resp_body();
-
-    if(rv > g_bufsize - 1)
+    int rv = readn(g_sfd, g_buf, size);
+    if(0 < rv)
     {
-        error("Unexpectedly large response", NULL, exit);
-    }
-
-    rv = readn(g_sfd, g_buf, rv);
-    if(rv > 0)
-    {
-        g_buf[rv - 2] = '\0';
+        char* p = g_buf + rv;
+        while(0 < rv--)
+        {
+            if('\n' == *(--p))
+            {
+                if(0 < rv && '\r' == *(p - 1))
+                    --p;
+                *p = '\0';
+            }
+        }
     }
     else if(rv == 0)
     {
@@ -381,28 +360,30 @@ cp_resp_body()
 void
 recv_resp()
 {
-    int rv;
+    int resp_body_size;
 
-    rv = read_resp_line();
-    if(0 == rv)
-    {
-        error("Received empty line. Expected a response.", NULL, exit);
-    }
+    if(0 == read_resp_line())
+        error("A response header was expected", NULL, exit);
 
-    if(0 == (rv = term_parse_resp_status(&g_req, g_buf)))
+    if(0 <= (resp_body_size = term_parse_resp_status(&g_req, g_buf)))
     {
+        if(0 < resp_body_size)
+        {
+            seek_to_resp_body();
+        }
+
         if(OK == g_req.status)
         {
             switch(g_req.method)
             {
                 case CD:
-                    cp_resp_body();
+                    cp_resp_body(resp_body_size);
                     set_prompt(g_buf);
                     break;
                 case AUTH:
                 case LS:
                 case WHO:
-                    print_resp_body();
+                    print_resp_body(resp_body_size);
                     break;
                 case LOGOUT:
                     g_running = 0;
@@ -416,7 +397,7 @@ recv_resp()
             print_bad_resp();
             if(AUTH == g_req.method && FORBIDDEN == g_req.status)
             {
-                print_resp_body();
+                print_resp_body(resp_body_size);
             }
         }
     }
