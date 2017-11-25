@@ -39,6 +39,7 @@ small_resp(struct peer* p, struct term_req* req)
 {
     size_t respsize;
     msgsize_t bodylen = strlen(req->msg);
+    bodylen += (bodylen != 0) ? 2 : 0;
 
     respsize = term_put_header(p->p_buffer, p->p_buflen, req->status,
             bodylen);
