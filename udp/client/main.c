@@ -399,6 +399,8 @@ runclient()
     fd_set readfd;
     struct timeval tv;
     unsigned char heartbeats = 0;
+    unsigned char disable_input = 0;
+    unsigned char received_hb = 0;
 
     authenticate();
 
@@ -417,17 +419,16 @@ runclient()
         {
             if(FD_ISSET(STDIN_FILENO, &readfd))
             {
+
                 cmdlen = read_cmd(cmdbuf, CMDBUFSIZE);
-                if(0 == cmdlen)
+                if(0 == cmdlen || -1 == parse_cmd(cmdbuf))
                 {
                     print_prompt();
                     continue;
                 }
-                if(-1 == parse_cmd(cmdbuf))
-                {
-                    print_prompt();
-                    continue;
-                }
+                FD_CLR(STDIN_FILENO, &allfd);
+                disable_input = 1;
+                received_hb = 0;
                 send_req();
             }
             else if(FD_ISSET(g_sfd, &readfd))
@@ -435,6 +436,22 @@ runclient()
                 recv_resp();
                 heartbeats = 0;
                 tv.tv_sec = TERMPROTO_T1;
+
+                if(0 != g_len && g_seq != g_req.seq)
+                    continue;
+                if(0 == g_len && 0 == disable_input)
+                    continue;
+                if(0 == g_len)
+                {
+                    if(3 < ++received_hb)
+                        puts("Response timeout");
+                    else
+                        continue;
+                }
+
+                FD_SET(STDIN_FILENO, &allfd);
+                disable_input = 0;
+                received_hb = 0;
             }
             else
             {
