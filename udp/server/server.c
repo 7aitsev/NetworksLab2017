@@ -49,16 +49,17 @@ trybind(struct addrinfo* servinfo)
             break;
         }
 
-        closesocket(this.master);
+        if(NULL != p->ai_next)
+            closesocket(this.master);
     }
 
     if(NULL == p)
     {
         logger_log("[server] Could not bind: %s\n", wstrerror());
+        closesocket(this.master);
         return -1;
     }
 
-    freeaddrinfo(servinfo);
     return 0;
 }
 
@@ -92,6 +93,7 @@ server_init(const char* host, const char* port)
     }
 
     rv = trybind(servinfo);
+    freeaddrinfo(servinfo);
     if(0 == rv && -1 == terminal_run(server_stop))
         return -1;
 
