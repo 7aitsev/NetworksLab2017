@@ -27,7 +27,6 @@ static int
 trybind(struct addrinfo* servinfo)
 {
     struct addrinfo* p;
-    BOOL yes = TRUE;
 
     for(p = servinfo; NULL != p; p = p->ai_next)
     {
@@ -35,13 +34,6 @@ trybind(struct addrinfo* servinfo)
         if(INVALID_SOCKET == this.master)
         {
             continue;
-        }
-
-        if(0 != setsockopt(this.master, SOL_SOCKET, SO_REUSEADDR,
-            (char*) &yes, sizeof(yes)))
-        {
-            logger_log("[server] setsockopt: %s\n", wstrerror());
-            return -1;
         }
 
         if(0 == bind(this.master, p->ai_addr, p->ai_addrlen))

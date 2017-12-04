@@ -62,7 +62,6 @@ error(const char *err_msg, const int socket, void (*exit)(int))
 void
 prepareclient(char* host, char* port)
 {
-    int yes = 1;
     struct addrinfo hints;
     struct addrinfo* p;
     struct addrinfo* serv_info;
@@ -84,12 +83,6 @@ prepareclient(char* host, char* port)
         if(-1 == g_sfd)
         {
             continue;
-        }
-
-        if(-1 == setsockopt(g_sfd, SOL_SOCKET, SO_REUSEADDR, 
-                (char*) &yes, sizeof(yes)))
-        {
-            error("setsockopt() failed", 0, exit);
         }
 
         if(0 != connect(g_sfd, p->ai_addr, p->ai_addrlen))
@@ -216,7 +209,7 @@ send_req()
     n = term_mk_req_header(&g_req, g_buf, g_bufsize);
     if(-1 == send(g_sfd, g_buf, n, MSG_NOSIGNAL))
     {
-        error("sendto() failed", 0, exit);
+        error("send() failed", 0, exit);
     }
 }
 
