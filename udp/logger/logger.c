@@ -45,7 +45,7 @@ waitfor(int* condition)
 {
     while(1 == __sync_and_and_fetch(condition, 1))
     {
-        usleep(LOGGER_SLEEP_TIME);
+        Sleep(LOGGER_SLEEP_TIME);
     }
 }
 
