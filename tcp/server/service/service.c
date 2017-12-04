@@ -80,7 +80,7 @@ find_in_db(FILE* fdb, const char* login, const char* pass)
     char p[11];
     char m;
 
-    while(3 == fscanf(fdb, "%10s %10s %hhd", l, p, &m))
+    while(3 == fscanf(fdb, " %10[a-zA-Z] %10[^;\t\r\n ] %hhd", l, p, &m))
     {
         if(0 == strcmp(login, l) && 0 == strcmp(pass, p))
             return m;
@@ -330,6 +330,8 @@ do_who(struct peer* p, struct term_req* req)
     if(NULL == buf)
     {
         logger_log("[service] who: malloc failed\n");
+        req->status = INTERNAL_ERROR;
+        error_term(p->p_sfd, req);
         return;
     }
 

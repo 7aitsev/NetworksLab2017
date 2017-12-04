@@ -18,8 +18,7 @@ enum TERM_STATUS {
     FORBIDDEN = 4,
     NOT_FOUND = 6,
     NOT_DIR = 8,
-    REQ_TIMEOUT = 10,
-    INTERNAL_ERROR = 12
+    INTERNAL_ERROR = 10
 };
 
 struct term_req {
