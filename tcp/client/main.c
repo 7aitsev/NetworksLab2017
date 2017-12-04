@@ -203,7 +203,7 @@ getpass(const char *prompt, char* password, unsigned char psize)
                 if(-1 == overlim)
                 {
                     overlim = 0;
-                    password[--plen] = '\0';
+                    --plen;
                 }
             }
         }
@@ -211,7 +211,7 @@ getpass(const char *prompt, char* password, unsigned char psize)
         {
             if(plen != 0)
             {
-                password[--plen] = '\0';
+                --plen;
             }
         }
         else
@@ -219,6 +219,7 @@ getpass(const char *prompt, char* password, unsigned char psize)
             password[plen++] = ch;
         }
     }
+    password[plen] = '\0';
     SetConsoleMode(hIn, con_mode);
     putchar('\n');
 
