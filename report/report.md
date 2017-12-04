@@ -184,7 +184,7 @@ Cервер открывает прослушивающий сокет (listenSo
 
 Клиентские запросы формируются из имени команды и аргумента, разделенных пробельным символом. Запрос должен заканчиваться последовательностью символов `\r\n`. Длина аргумента не должна превышать 255 байт. В результате запрос выглядит так: `имя_команды аргумент\r\n`
 
-Таким образом, сервер может считывать запросы, пока не встретит символ-разделитель - клиенту не нужно считать длину, а сервер выполнят чтение запроса минимум в два приема (см. [код функции readcrlf()](../tcp/lib/efunc.c), что достаточно эффективно. Отмечу, что readcrlf() корректно работает, даже если в качестве разделителя имеется только лишь символ `\n`.
+Таким образом, сервер может считывать запросы, пока не встретит символ-разделитель - клиенту не нужно считать длину, а сервер выполнят чтение запроса минимум в два приема (см. код функции [readcrlf()](../tcp/lib/efunc.c), что достаточно эффективно. Отмечу, что readcrlf() корректно работает, даже если в качестве разделителя имеется только лишь символ `\n`.
 
 В свою очередь, каждый ответ начинается со строки (заголовка ответа), содержащей длину сообщения (тела ответа), числового кода результата операции (статус) и короткого текстового описания результат обработки запроса. Строка завершается последовательностью `\r\n`. Отсюда - формат заголовка (без тела): `0 статус текстовое_описание\r\n`
 
@@ -216,8 +216,250 @@ Cервер открывает прослушивающий сокет (listenSo
 
 Для обнаружения проблем, вызванных крахом систем на одном из сторон обмена, аварией сетевого оборудования или чрезмерно низкой пропускной способностью сети (теряющей, портящей, задерживающей пакеты) и другими сетевыми сбоями, был реализован механизм пульсаций. Его суть описана в "Совете 10..." уже упомянутой книги Й. Снейдера. Коротко опишу отличия моей реализации:
 * для сообщений-пульсов не был введен отдельный тип MSG_HEARTBEAT. Приложения понимают, что получено сообщение-пульс по нулевой длине, возвращаемой из recv(). Это позволяет минимальными усилиями и без изменения протокола имплементировать механизм пульсаций. К тому же, это чуть-чуть экономит интернет трафик.
-* Клиент не только следит за доступностью удаленного узла, но и контролирует, чтобы с момента отправки запроса не было получено больше трех пульсов от сервера. На четвертое сообщение-пульс клиент сообщит о превышении времени ожидания.
+* клиент не только следит за доступностью удаленного узла, но и контролирует, чтобы с момента отправки запроса не было получено больше трех пульсов от сервера. На четвертое сообщение-пульс клиент сообщит о превышении времени ожидания.
 * сервер следит за состоянием соединения с клиентами на основе времени, а не числа пропущенных сообщений-импульсов. Это так, потому что один клиент может прождать период T1 + T2, и тогда сервер должен прерываться раз в T2 секунд и увеличивать счетчик пропущенных сообщений от клиента. Только если клиентов много, то непонятно, какой из них просрочил отправку данных. Поэтому у меня сервер прерывается раз в T1 + T2 секунд и проверяет, сколько времени прошло с момента последней активности каждого клиента.
 
-## Тестирование
+## Тестирование приложений
+
+На Linux-хосте установлена VirtualBox, запускающей виртуальную машину с Windows 7. VirtualBox создает сетевой итерфейс vboxnet0 для связи хоста и виртульной машины. Хост на этом сетевом интерфейсе имеет адреса 192.168.56.1, а адрес виртуальной машины - 192.168.56.101.
+
+### TCP приложения
+
+Для тестирования серера на Linux, собрал debug версию проекта, чтобы можно было использовать возможности ThreadSanitizer - динамического анализатора наличия состояний гонок ThreadSanitizer.
+
+Запустим сервер, принимающего подключения по адресу 192.168.56.101 и порту 5001, с выводом отладочной информации в файл log:
+
+```
+max@darkstar:/home/max/Documents/.do/ne│max@darkstar:/home/max/Documents/.do/net
+t/NetworksLab2017/tcp/build$ ./server_d│gNetworksLab2017/tcp/build$ tail -f log 
+ebug 192.168.56.1 5001 2>log           │[main] starting the server...           
+>                                      │[handler] initializing...               
+                                       │[terminal] starting...                  
+                                       │[terminal] started                      
+                                       │[server] new peer: 4                    
+                                       │[handler] new peer sfd=4                
+                                       │[service] auth: ok                      
+                                       │[service] chdir=/    
+```
+Окно клиента:
+```
+C:\Users\IEUser\Desktop\NetworksLab2017\tcp\build>client 192.168.56.1 5001
+Username: first
+Password:
+Successful authentication
+
+first:/$
+```
+Видно, что клиент успешно подключился и сменил директорию на `/`.
+
+Подключим еще одного клиента из telnet (на Windows):
+```
+C:\Users\IEUser>telnet
+telnet> o 192.168.56.1 5001
+Trying 192.168.56.1...
+Connected to 192.168.56.1.
+Escape character is '^]'.
+```
+И посмотрим на сервере с помощью команды "status" список подключенных клиентов:
+```
+> status                               │[handler] initializing...               
+Online peers: 2                        │[terminal] starting...                  
+Served peers for all time: 2           │[terminal] started                      
+Peer #1                                │[server] new peer: 4                    
+        IP address: 192.168.56.101     │[handler] new peer sfd=4                
+        Port: 49190                    │[service] auth: ok                      
+        Socket: 4                      │[service] chdir=/                       
+        Username: first                │[server] new peer: 5 // новый клиент
+        CWD: /                         │[handler] new peer sfd=5                
+        Mode: 2                        │[terminal] showing statistics // запуск status
+Peer #2                                │[handler] foreach                       
+        IP address: 192.168.56.101     │[peer] no cache for Peer#1              
+        Port: 49191                    │[peer] no cache for Peer#2              
+        Socket: 5                      │                                        
+        Not authorised                 │                                        
+> 
+```
+Мы видим, что второй клиент не авторизован, а у первого есть права суперпользователя. Можем получить информацию об IP-адресах и портах клиентов. Стоит обратить внимание на то, что у клиентских портов номера из динамического диапазона портов.
+
+Выполним команду WHO на telnet-клиенте от имени неавторизованного клиента:
+```
+WHO .
+0 403 Forbidden
+```
+Без авторизации ни одна команда не выполнится. Видим, что у ответа нулевая длина в теле сообщения.
+
+Выполним ту же команду через клиент системы терминального доступа:
+```
+first:/$ who
+ID      UNAME   MODE    CWD
+1       first   2       /
+TOTAL: 1
+
+first:/$
+```
+В выводе команды видим идентификатор пользователя на время сессии, имя, права доступа и текущую директорию.
+
+Попробуем выполнить команду CD:
+```
+first:/$ cd home/max/VirtualBox VMs
+first:/home/max/VirtualBox VMs$
+```
+Приглашение в коммандном интерпретаторе поменялось: теперь оно содержит текущую директорию. Запустим `ls` (аналог `LS .`) и затем `ls .././../friend/../max/..`:
+```
+first:/home/max/VirtualBox VMs$ ls
+win7/
+linx/
+
+first:/home/max/VirtualBox VMs$ ls .././../friend/../max/..
+friend/
+lost+found/
+ftp/
+max/
+box/
+
+first:/home/max/VirtualBox VMs$
+```
+Сперва вывелось содержимое `/home/max/VirtualBox`, а потом - домашнего каталога, при этом текущая директория не изменилась - проверим это на сервере:
+```
+> status                               │[handler] new peer sfd=4                
+Online peers: 2                        │[service] auth: ok  
+Served peers for all time: 2           │[service] chdir=/   
+Peer #1                                │[server] new peer: 5                    
+        IP address: 192.168.56.101     │[handler] new peer sfd=5                
+        Port: 49190                    │[terminal] showing statistics           
+        Socket: 4                      │[handler] foreach   
+        Username: first                │[peer] no cache for Peer#1              
+        CWD: /home/max/VirtualBox VMs  │[peer] no cache for Peer#2              
+        Mode: 2                        │[handler] foreach   
+Peer #2                                │[service] chdir=/home/max/VirtualBox VMs
+        IP address: 192.168.56.101     │or directory        
+        Port: 49191                    │[terminal] showing statistics           
+        Socket: 5                      │[handler] foreach   
+        Not authorised                 │
+>                                      |
+```
+
+Пройдем процедуру аутенификации на telnet-клиенте:
+```
+AUTH second;tokio
+27 200 OK
+
+Successful authentication
+```
+Выполним WHO из клиента от имени first и попробуем выполнить kill с разными именами пользователей:
+```
+first:/home/max/VirtualBox VMs$ who
+ID      UNAME   MODE    CWD
+1       first   2       /home/max/VirtualBox VMs
+2       second  1       /
+TOTAL: 2
+
+first:/home/max/VirtualBox VMs$ kill first
+KILL: Forbidden
+first:/home/max/VirtualBox VMs$ kill third
+KILL: Not Found
+first:/home/max/VirtualBox VMs$ kill second
+first:/home/max/VirtualBox VMs$ who
+ID      UNAME   MODE    CWD
+1       first   2       /home/max/VirtualBox VMs
+TOTAL: 1
+
+first:/home/max/VirtualBox VMs$
+```
+Завершим сессию first:
+```
+first:/home/max/VirtualBox VMs$ logout
+
+C:\Users\IEUser\Desktop\NetworksLab2017\tcp\build>
+```
+Посмотрим, что происходит на сервере:
+```
+> status                               │[handler] foreach   
+Online peers: 0                        │[handler] delete all
+Served peers for all time: 2           │[handler] delete all
+>                                      │[handler] Deleting the peer #2: sfd=5, t
+                                       │id=3495937792       
+                                       │[handler] foreach   
+                                       │[service] logout: username=first        
+                                       │[handler] Deleting #1: sfd=4, tid=350433                    
+                                       │0496                    
+                                       │[terminal] showing statistics           
+                                       │[handler] foreach
+```
+За все время работы сервера было обслужано два клиента, и на момент запуска status нет ни одно соединения.
+
+Проверим, освобождены ли ресурсы: файловые дескрипторы, сокеты и нет ли незавершенных потоков:
+```
+max@darkstar:/home/max/Documents/.do/net/NetworksLab2017/tcp/build$ pgrep server_debug
+30779
+max@darkstar:/home/max/Documents/.do/net/NetworksLab2017/tcp/build$ ps -p 30779 -Lo f,s,uid,pid,ppid,lwp,wchan,cmd
+F S   PID  PPID   LWP WCHAN  CMD
+0 S 30779 29792 30779 futex_ ./server_debug 192.168.56.1 5001
+1 S 30779 29792 30780 hrtime ./server_debug 192.168.56.1 5001
+1 S 30779 29792 30781 futex_ ./server_debug 192.168.56.1 5001
+1 S 30779 29792 30782 inet_c ./server_debug 192.168.56.1 5001
+1 S 30779 29792 30783 wait_w ./server_debug 192.168.56.1 5001
+```
+Поток с флагом 0 - основной. Есть еще поток сервера, поток логгера и поток терминала, работающего с пользовательским вводом. Один поток порожден ThreadSanitizer - динамический анализатор программы на наличие состояний гонок.
+
+Выведим список открытых файловых дескрипторов, включая сокеты:
+```
+max@darkstar:/home/max/Documents/.do/net/NetworksLab2017/tcp/build$ lsof -d 0-100 -a -p 30779 
+COMMAND     PID USER   FD   TYPE  DEVICE SIZE/OFF    NODE NAME
+server_de 30779  max    0u   CHR   136,1      0t0       4 /dev/pts/1
+server_de 30779  max    1u   CHR   136,1      0t0       4 /dev/pts/1
+server_de 30779  max    2w   REG     8,4      545 1310942 /home/max/Documents/.do/net/NetworksLab2017/tcp/build/log
+server_de 30779  max    3u  IPv4 2937714      0t0     TCP 192.168.56.1:commplex-link (LISTEN)
+```
+У процесса открыты только три файла: консольный ввод-вывод, вывод в файл и сокет в состоянии прослушивания.
+
+Подключим еще двух клиентов и проверим список пользователя с консоли сервера:
+```
+Online peers: 2                        │[service] chdir=/  
+Served peers for all time: 5           │[handler] foreach  
+Peer #3                                │[service] logout: username=third       
+        IP address: 192.168.56.101     │[handler] Deleting #4: sfd=7, tid=112091
+        Port: 49282                    │3152
+        Socket: 6                      │[server] new peer: 8                   
+        Username: second               │[handler] new peer sfd=8               
+        CWD: /                         │[service] auth: ok 
+        Mode: 1                        │[service] chdir=/  
+Peer #5                                │[handler] foreach  
+        IP address: 192.168.56.101     │[terminal] showing statistics          
+        Port: 49286                    │[handler] foreach  
+        Socket: 8                      │[peer] no cache for Peer#3             
+        Username: fourth               │[peer] no cache for Peer#5             
+        CWD: /                         │[terminal] showing statistics           
+        Mode: 2                        │[handler] foreach   
+>                                      │
+```
+Обращу внимание на то, что был подключен клиент three, после чего он вышел (видно из логов и по идентификационному номеру 5 у пользователя fourth). Теперь с консоли отключу пользователя second по его ID:
+```
+        CWD: /                         │[terminal] kill 3   
+        Mode: 2                        │[handler] delete first                  
+> k 3                                  │[handler] Deleting the peer #3: sfd=6, t
+>                                      │id=1129305856
+```
+Пользователь удален. Попробуем выполнить команду из терминала пользователя second:
+```
+second:/$ logout
+readcrlf() failed:
+An existing connection was forcibly closed by the remote host.
+```
+
+А теперь завершим сервер с подключенным клиентом:
+```
+        Socket: 8                      │[terminal] shutdown requested           
+        Username: fourth               │[terminal] joining...                   
+        CWD: /                         │[handler] destroing...                  
+        Mode: 2                        │[handler] delete all                    
+> k 1                                  │[handler] Deleting the peer #5: sfd=8, t
+> q                                    │id=1120913152       
+max@darkstar:/home/max/Documents/.do/ne│[main] server has shut down
+```
+Клиент fourth не отключится при попытке обратиться к серверу.
+
+Таким образом, сервер успешно выполняет работу по обслуживанию клиентских подключений и обработке запросов. Все ресурсы высвобождаются по мере необходимости.
+
+### UDP приложения
 
