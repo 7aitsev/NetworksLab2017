@@ -54,7 +54,7 @@ find_in_db(FILE* fdb, const char* login, const char* pass)
     char l[11];
     char p[11];
 
-    while(3 == fscanf(fdb, "%10[a-zA-Z] %10[^;\t\r\n ] %c", l, p, &mode))
+    while(3 == fscanf(fdb, " %10[a-zA-Z] %10[^;\t\r\n ] %c", l, p, &mode))
     {
         if(0 == strcmp(login, l) && 0 == strcmp(pass, p))
             return mode - '0';
