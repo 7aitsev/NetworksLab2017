@@ -10,7 +10,7 @@
 #include <stdio.h>
 
 #define DEFAULT_PATH "C:\\"
-#define DB_ACCOUNTS "C:\\Users\\IEUser\\AppData\\Local\\Temp\\accounts"
+#define DB_ACCOUNTS "%TMP%\\accounts"
 
 static const char * const MSG_EMPTY = "";
 static const char * const AUTH_MULTIPLE = "You\'ve been authorised";
