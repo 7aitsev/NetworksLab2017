@@ -196,9 +196,11 @@ terminal_run(void (*stopserver_cb)(void))
 void
 terminal_stop()
 {
+    TerminateThread(this.td_hndl, 0);
     CloseHandle(this.td_input_event);
     CloseHandle(this.td_read_ena);
     CloseHandle(this.td_exec_ena);
     logger_log("[terminal] joining...\n");
     WaitForSingleObject(this.td_hndl, INFINITE);
+    CloseHandle(this.td_hndl);
 }

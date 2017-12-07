@@ -134,6 +134,8 @@ handle_master_socket(WSAEVENT event)
     }
     else
     {
+        if(WSAECONNRESET == GetLastError())
+            return;
         logger_log("[server] recvfrom failed: %s\n", wstrerror());
         this.is_running = 0;
     }
